@@ -58,6 +58,10 @@ class GradingRecipe(BaseModel):
     tone_curve: list[CurvePoint] = Field(default_factory=list)  # luma curve, optional
     split_tone: SplitTone = SplitTone()
 
+    # How strongly to shield skin tones from hue-sat and split-tone moves.
+    # 0 = no protection, 1 = skin fully pinned. Identity-safe at any value.
+    skin_protection: float = Field(default=0.7, ge=0.0, le=1.0)
+
     look_description: str = ""
 
     def model_post_init(self, __context) -> None:

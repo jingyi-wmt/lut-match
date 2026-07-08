@@ -52,7 +52,10 @@ Respond with ONLY a JSON object, no markdown fences, matching exactly:
   }}
 }}
 Be decisive: a distinctive reference deserves distinctive values, a neutral \
-reference deserves near-identity values.
+reference deserves near-identity values. Keep skin tones natural: if faces \
+are present in the footage frame, do not rely on red/yellow hue-band moves \
+or heavy temperature swings to sell the look — put it in contrast, \
+split-toning and the other bands instead.
 """
 
 REPAIR_SUFFIX = (

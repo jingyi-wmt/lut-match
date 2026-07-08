@@ -94,3 +94,16 @@ Python 3.12+, deps: `fastapi uvicorn numpy pillow colour-science httpx pydantic 
 5. **Shadow/Highlight fine-tune sliders**, plus the existing temp/tint/contrast/saturation, now form a separate *tweaks layer* (`/tweaks` endpoint, `GradingRecipe` with `shadows`/`highlights` fields) applied after the match in **both** DNA and literal-match modes. The AI recipe is no longer edited by the sliders.
 
 Pipeline is now: footage → log-to-display → auto-correction → DNA recipe or literal match (strength) → user tweaks → .cube.
+
+## Revisions — 2026-07-08 (colorist review round)
+
+Reviewed as a colorist; implemented the core color-science fixes plus polish:
+
+1. **Skin-tone protection** (`skin_protection` on `GradingRecipe`, default 0.7): per-hue saturation moves and split-toning are attenuated for colors near the skin-tone line (hue ≈25° ± 22°, skin-typical chroma/luma). Being hue-based, it bakes into the LUT. DNA prompt now also instructs the model to keep skin natural.
+2. **Near-neutral white balance**: WB is measured from the scene's actual near-neutral pixels (chroma < 0.10) and applied FIRST — before the levels stretch, which would amplify chroma and hide the neutrals. Gray-world is only a tightly-capped (0.93–1.08) fallback when a scene has no neutrals, so sunsets/neon keep their intended cast.
+3. **Correction deadband + strength**: levels only act when blacks/whites are clearly off (p1 > 0.06 or p99 < 0.80); exposure gamma only when mean luma leaves 0.32–0.58. New "Correction" strength slider (0–100%, `/options` endpoint) blends the whole correction.
+4. **Soft-knee clip** (`soft_clip` in render.py): final pipeline stage; identity inside [0.03, 0.97], smooth tanh rolloff outside — pushed highlights compress instead of clipping flat.
+5. **Separated S/H bands**: shadows die out by mid-gray, highlights start there — the two sliders no longer fight over midtones.
+6. **LUT resolution option**: 33-pt or 65-pt export (`/export?size=`), selector in the UI.
+
+Deferred by JZ for later: live scopes (waveform/vectorscope), correction-only A/B compare.

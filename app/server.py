@@ -19,7 +19,7 @@ from app.engine.logspace import FOOTAGE_TYPES, to_display
 from app.engine.lut import bake_lut, write_cube
 from app.engine.match import apply_match, mkl_transform
 from app.engine.recipe import GradingRecipe
-from app.engine.render import apply_recipe
+from app.engine.render import apply_recipe, soft_clip
 from app.vision.provider import VisionError
 from app.vision.registry import build_provider
 
@@ -45,6 +45,7 @@ class Session:
     recipe: GradingRecipe | None = None
     tweaks: GradingRecipe = GradingRecipe()
     correction: Correction | None = None
+    correction_strength: float = 1.0
     match_params: tuple[np.ndarray, np.ndarray] | None = None
     warnings: dict[str, list[str]] = {}
 
@@ -76,7 +77,7 @@ def _grade(pixels_display: np.ndarray, mode: str, strength: float) -> np.ndarray
     """Correction first (fix lighting), match second, user fine-tune last."""
     out = pixels_display
     if S.correction is not None:
-        out = apply_correction(out, S.correction)
+        out = apply_correction(out, S.correction, S.correction_strength)
     if mode == "match":
         _require(S.match_params is not None, "Literal match not computed yet")
         A, b = S.match_params
@@ -84,7 +85,7 @@ def _grade(pixels_display: np.ndarray, mode: str, strength: float) -> np.ndarray
     else:
         _require(S.recipe is not None, "No recipe yet — run Analyze first")
         out = apply_recipe(out, S.recipe, strength)
-    return apply_recipe(out, S.tweaks)
+    return soft_clip(apply_recipe(out, S.tweaks))
 
 
 @app.get("/")
@@ -169,6 +170,17 @@ def update_tweaks(req: RecipeUpdate):
     return {"ok": True}
 
 
+class OptionsUpdate(BaseModel):
+    correction_strength: float | None = None
+
+
+@app.post("/options")
+def update_options(req: OptionsUpdate):
+    if req.correction_strength is not None:
+        S.correction_strength = float(min(max(req.correction_strength, 0.0), 1.0))
+    return {"ok": True}
+
+
 @app.get("/image/{which}")
 def image(which: str):
     if which == "reference":
@@ -188,14 +200,15 @@ def preview(strength: float = 1.0, mode: str = "dna"):
 
 
 @app.get("/export")
-def export(strength: float = 1.0, mode: str = "dna"):
+def export(strength: float = 1.0, mode: str = "dna", size: int = 33):
     _require(S.frame is not None, "no frame")
+    _require(size in (17, 33, 65), "size must be 17, 33 or 65")
     footage_type = S.footage_type
 
     def pipeline(lattice: np.ndarray) -> np.ndarray:
         return _grade(to_display(lattice, footage_type), mode, strength)
 
-    table = bake_lut(pipeline)
+    table = bake_lut(pipeline, size=size)
     OUTPUT_DIR.mkdir(exist_ok=True)
     suffix = "dna" if mode == "dna" else "match"
     name = f"{S.reference_name}-{suffix}.cube"

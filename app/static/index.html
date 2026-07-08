@@ -101,6 +101,9 @@
       <label class="row" style="margin:0 0 8px"><span>Auto-correct lighting first</span>
         <input type="checkbox" id="auto-correct" checked>
       </label>
+      <label class="row"><span class="name">Correction</span>
+        <input type="range" id="correction-strength" min="0" max="1" step="0.02" value="1"><span class="val" id="correction-val">100%</span>
+      </label>
       <button class="primary wide" id="analyze" disabled>Analyze reference look</button>
       <p id="note"></p>
       <p id="look"></p>
@@ -137,7 +140,11 @@
       <div class="mode-row">
         <button id="mode-dna" class="active">DNA recipe</button>
         <button id="mode-match">Literal match</button>
-        <button class="primary" id="export" style="margin-left:auto" disabled>⬇ Export .cube</button>
+        <select id="lut-size" style="margin-left:auto" title="LUT resolution">
+          <option value="33" selected>33-pt</option>
+          <option value="65">65-pt</option>
+        </select>
+        <button class="primary" id="export" disabled>⬇ Export .cube</button>
       </div>
     </div>
   </div>
@@ -314,7 +321,19 @@ $("mode-dna").onclick = async () => {
 $("mode-match").onclick = () => { state.mode = "match"; setActiveMode(); refreshPreview(); };
 
 $("export").onclick = () => {
-  window.location = `/export?strength=${$("strength").value}&mode=${state.mode}`;
+  window.location = `/export?strength=${$("strength").value}&mode=${state.mode}&size=${$("lut-size").value}`;
+};
+
+// --- correction strength ---
+$("correction-strength").oninput = () => {
+  $("correction-val").textContent = Math.round($("correction-strength").value * 100) + "%";
+};
+$("correction-strength").onchange = async () => {
+  try {
+    await api("/options", { method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ correction_strength: +$("correction-strength").value }) });
+    refreshPreview();
+  } catch (e) { setError(e.message); }
 };
 
 // --- init ---
