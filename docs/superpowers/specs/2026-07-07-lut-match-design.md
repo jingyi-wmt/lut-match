@@ -140,3 +140,34 @@ window was maximized. Fixed by turning the desktop layout into a fixed-height co
 - Under 900px the height lock releases (natural document scroll).
 - Verified Fine-tune fully visible + correct 1.78 ratio + no h-scroll at viewport heights
   900/820/700/560; hover-wipe still tracks. Also bumped the wipe label 10px→11px.
+
+## Revisions — 2026-07-08 (round 6: narrow-window layout bug)
+
+Screenshot from JZ showed the preview image overlapping both the "PREVIEW" header
+above and the "4 · Fine-tune" panel below at narrower window widths. Two independent
+CSS bugs, both confirmed live before fixing:
+
+1. **Mobile media-query override was silently dead.** The `@media (max-width:900px)`
+   block's `.preview-card{flex:none}` rule appeared *earlier* in the stylesheet than the
+   unconditional `.preview-card{flex:1 1 0; min-height:0}` rule — at equal specificity,
+   source order decides, so the later unconditional rule always won regardless of viewport
+   width. `flex:1 1 0` in a `min-height:0` flex column with no defined parent height
+   collapsed the card to near-zero height while its children (preview-body, image) kept
+   rendering at their natural size, overflowing outside the collapsed box. Fixed by moving
+   the mobile overrides to the very end of the stylesheet and explicitly resetting
+   `min-height` alongside `flex` on `.preview-card` and `.preview-body`.
+2. **Grid/flex blowout.** Once (1) was fixed, `.col-left`/`.col-right` (CSS grid items)
+   and `.tune-grid label.row` (grid items containing a flex row with a range input)
+   rendered wider than their tracks — grid and flex items default to `min-width:auto`,
+   which lets a wide child (a `<input type=range>` has real intrinsic width) force the
+   track to grow past its `1fr` allotment, overflowing the viewport horizontally. Fixed
+   with `min-width:0` on `.col-left`, `.col-right`, `.tune-grid label.row`, and
+   `input[type=range]` globally.
+
+Also made `fitPreview()` a no-op below the 900px breakpoint (mobile relies on CSS
+`aspect-ratio` + `width:100%`, not JS-computed sizing) so it doesn't fight the natural
+document-flow layout there.
+
+Verified live at 600×1000 (the reported bug width): no overlap, no horizontal scroll,
+correct top-to-bottom stacking of Reference → Frame → Match → Preview → Fine-tune.
+Re-confirmed the round-5 desktop cockpit behavior (1440×820) is unaffected.

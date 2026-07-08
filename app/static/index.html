@@ -21,16 +21,8 @@
   #quit { margin-left: auto; font-size: 12px; padding: 3px 12px; }
   main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px;
          padding: 16px 22px; flex: 1 1 auto; min-height: 0; }
-  .col-left { min-height: 0; overflow-y: auto; }
-  .col-right { min-height: 0; overflow-y: auto; }
-  @media (max-width: 900px) {
-    body { height: auto; overflow: auto; }
-    main { grid-template-columns: 1fr; height: auto; }
-    .col-left { overflow-y: visible; }
-    .col-right { overflow-y: visible; }
-    .preview-card { flex: none; }
-    .mode-row { flex-wrap: wrap; }
-  }
+  .col-left { min-height: 0; min-width: 0; overflow-y: auto; }
+  .col-right { min-height: 0; min-width: 0; overflow-y: auto; }
 
   .col { display: flex; flex-direction: column; gap: 14px; }
   .card { background: var(--panel); border: 1px solid #2c303a; border-radius: 10px; padding: 14px; }
@@ -56,7 +48,7 @@
     border: 1px solid #3a4050; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
   label.row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; gap: 10px; }
   label.row span.name { min-width: 74px; }
-  input[type=range] { flex: 1; accent-color: var(--accent); }
+  input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
   input[type=checkbox] { accent-color: var(--accent); }
   .val { width: 44px; text-align: right; color: var(--accent2); font-variant-numeric: tabular-nums; }
 
@@ -89,6 +81,7 @@
                  justify-content: center; color: var(--dim); }
 
   .tune-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .tune-grid label.row { min-width: 0; }
   .reset-one { padding: 2px 7px; font-size: 12px; color: var(--dim); border-radius: 5px; line-height: 1.2; }
   .reset-one:hover { color: var(--accent); }
 
@@ -104,6 +97,19 @@
   .chip .clear { border: none; background: none; color: var(--dim); font-size: 12px;
                  padding: 0 4px; cursor: pointer; }
   .chip .clear:hover { color: #e86a6a; }
+
+  /* Below this width the layout drops the fixed-height "cockpit" and
+     reverts to natural document flow — every card sizes to its own
+     content and the page scrolls. Placed last so it reliably overrides
+     the desktop flex rules above at equal specificity. */
+  @media (max-width: 900px) {
+    body { height: auto; overflow: auto; }
+    main { grid-template-columns: 1fr; height: auto; }
+    .col-left, .col-right { overflow-y: visible; min-height: auto; }
+    .preview-card { flex: none; min-height: auto; }
+    .preview-body { flex: none; min-height: auto; }
+    .mode-row { flex-wrap: wrap; }
+  }
 </style>
 </head>
 <body>
@@ -361,9 +367,14 @@ $("strength").oninput = () => {
 };
 
 // --- fit the 16:9 preview into whatever height the layout leaves ---
+// Below 900px the page reverts to natural scrolling and the preview just
+// sizes via CSS (width:100%, aspect-ratio); no JS sizing needed there.
 function fitPreview() {
   const wrap = $("preview-wrap");
-  if (document.fullscreenElement === wrap) { wrap.style.width = ""; return; }
+  if (window.matchMedia("(max-width: 900px)").matches || document.fullscreenElement === wrap) {
+    wrap.style.width = "";
+    return;
+  }
   const body = wrap.parentElement;               // .preview-body
   const availW = body.clientWidth;
   const availH = body.clientHeight;
