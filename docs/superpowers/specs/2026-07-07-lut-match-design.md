@@ -118,3 +118,10 @@ Deferred by JZ for later: live scopes (waveform/vectorscope), correction-only A/
 6. **A/B/C compare slots** (sessionStorage): save/load full slider state for quick look comparison.
 7. **33/65 selector removed** from UI (server still accepts `size=`).
 8. **`LUT Match.app`** double-clickable bundle (plain Info.plist + shell launcher; reuses a running server, first-run venv setup with notification) + in-app **Quit** button (`/shutdown`).
+
+## Revisions — 2026-07-08 (round 4: correction slider bug + UX)
+
+1. **Correction slider actually does something now.** Root cause: the band-wise match was recalibrated from the corrected frame on every strength change, so the match re-normalized whatever the correction did — net-zero visual effect. Now the match is calibrated once against the FULLY corrected frame and the slider modulates the real input at grade time (verified: 18/255 mean pixel difference between 0% and 100% on a dark frame). When a frame is genuinely clean, the slider is disabled + dimmed with the summary explaining why.
+2. **Responsive preview**: preview width capped at `min(100%, 58vh × 16/9)` so it always fits the window; single-column layout under 900px, no horizontal scroll.
+3. **Per-slider ↺ reset buttons** on all six fine-tune sliders, plus "Reset all".
+4. **Saved-looks redesign** (was confusing A/save | B/save | C/save): one "📌 Save look" button pins the current look to the next free chip (A/B/C); chips appear only once used; click a chip to flip back; × forgets it; any manual adjustment un-highlights the active chip (you've diverged). Hint text shown until the first save.

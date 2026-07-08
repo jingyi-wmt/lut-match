@@ -66,14 +66,18 @@ def _display_frame() -> np.ndarray:
 
 
 def _recompute(display: np.ndarray | None = None) -> None:
-    """Refresh correction + match transforms from current session settings."""
+    """Refresh correction + match transforms from current session settings.
+
+    The match is calibrated against the FULLY corrected frame. The strength
+    slider then modulates the actual input at grade time — so dialing the
+    correction down visibly lets the footage's original lighting show
+    through, instead of the match re-normalizing it away.
+    """
     if display is None:
         display = _display_frame()
     S.correction = compute_correction(display) if S.auto_correct else None
     corrected = (
-        apply_correction(display, S.correction, S.correction_strength)
-        if S.correction
-        else display
+        apply_correction(display, S.correction, 1.0) if S.correction else display
     )
     S.match_transforms = banded_mkl_transform(corrected, S.reference)
 
@@ -157,8 +161,9 @@ def update_options(req: OptionsUpdate):
         S.keep_luma = req.keep_luma
     if req.auto_correct is not None:
         S.auto_correct = req.auto_correct
-    # Correction settings shift the ground the match stands on — recompute.
-    if (req.auto_correct is not None or req.correction_strength is not None) and (
+    # Only toggling auto-correct changes what the match is calibrated on;
+    # strength changes are applied live at grade time.
+    if req.auto_correct is not None and (
         S.frame is not None and S.reference is not None and S.match_transforms is not None
     ):
         _recompute()

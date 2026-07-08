@@ -17,7 +17,11 @@
   header h1 { font-size: 17px; margin: 0; letter-spacing: .3px; }
   header .sub { color: var(--dim); font-size: 12px; }
   #quit { margin-left: auto; font-size: 12px; padding: 3px 12px; }
-  main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px 22px; }
+  main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px 22px; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    .mode-row { flex-wrap: wrap; }
+  }
 
   .col { display: flex; flex-direction: column; gap: 14px; }
   .card { background: var(--panel); border: 1px solid #2c303a; border-radius: 10px; padding: 14px; }
@@ -55,7 +59,8 @@
   .preview-head h2 { margin: 0; }
   #fullscreen { padding: 4px 10px; font-size: 12px; }
   .preview-wrap { position: relative; border-radius: 8px; overflow: hidden;
-                  background: #000; aspect-ratio: 16 / 9; user-select: none; cursor: col-resize; }
+                  background: #000; aspect-ratio: 16 / 9; user-select: none; cursor: col-resize;
+                  width: min(100%, calc(58vh * 16 / 9)); margin: 0 auto; }
   .preview-wrap:fullscreen { border-radius: 0; aspect-ratio: auto; }
   .preview-wrap img { display: block; width: 100%; height: 100%; object-fit: contain;
                       pointer-events: none; }
@@ -69,14 +74,21 @@
                  justify-content: center; color: var(--dim); }
 
   .tune-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; }
-  .slots { display: flex; gap: 10px; align-items: center; margin-left: auto; }
-  .slot { display: flex; }
-  .slot button { padding: 6px 10px; }
-  .slot .load { border-radius: 7px 0 0 7px; min-width: 34px; color: var(--dim); }
-  .slot.filled .load { color: var(--text); border-color: #4a5060; }
-  .slot.active .load { border-color: var(--accent2); color: var(--accent2); }
-  .slot .save { border-radius: 0 7px 7px 0; border-left: none; font-size: 11px; color: var(--dim); }
-  .slot .save:hover { color: var(--accent); }
+  .reset-one { padding: 2px 7px; font-size: 12px; color: var(--dim); border-radius: 5px; line-height: 1.2; }
+  .reset-one:hover { color: var(--accent); }
+
+  .looks { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+  .looks .hint { color: var(--dim); font-size: 12px; }
+  #save-look { font-size: 13px; }
+  #save-look:disabled { opacity: .4; cursor: default; }
+  .chip { display: none; align-items: center; gap: 6px; padding: 6px 6px 6px 12px;
+          border: 1px solid #3a4050; border-radius: 20px; cursor: pointer;
+          background: var(--panel2); font-size: 13px; }
+  .chip.filled { display: inline-flex; }
+  .chip.active { border-color: var(--accent2); color: var(--accent2); }
+  .chip .clear { border: none; background: none; color: var(--dim); font-size: 12px;
+                 padding: 0 4px; cursor: pointer; }
+  .chip .clear:hover { color: #e86a6a; }
 </style>
 </head>
 <body>
@@ -139,22 +151,26 @@
       </label>
       <div class="mode-row">
         <button class="primary" id="export" disabled>⬇ Export .cube</button>
-        <div class="slots" id="slots">
-          <span style="color:var(--dim);font-size:12px">Compare:</span>
+        <div class="looks" id="looks">
+          <span class="hint" id="looks-hint">Like this look? Save it, tweak on, then click a chip to flip back:</span>
+          <span class="chip" id="chip-A"></span>
+          <span class="chip" id="chip-B"></span>
+          <span class="chip" id="chip-C"></span>
+          <button id="save-look" disabled>📌 Save look</button>
         </div>
       </div>
     </div>
     <div class="card" id="tweaks" style="display:none">
       <h2>4 · Fine-tune</h2>
       <div class="tune-grid">
-        <label class="row"><span class="name">Temp</span><input type="range" id="temperature" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
-        <label class="row"><span class="name">Tint</span><input type="range" id="tint" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
-        <label class="row"><span class="name">Contrast</span><input type="range" id="contrast" min="0.4" max="2" step="0.02" value="1"><span class="val">1.00</span></label>
-        <label class="row"><span class="name">Saturation</span><input type="range" id="saturation" min="0" max="2" step="0.02" value="1"><span class="val">1.00</span></label>
-        <label class="row"><span class="name">Shadows</span><input type="range" id="shadows" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
-        <label class="row"><span class="name">Highlights</span><input type="range" id="highlights" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
+        <label class="row"><span class="name">Temp</span><input type="range" id="temperature" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span><button class="reset-one" data-reset="temperature" title="Reset Temp">↺</button></label>
+        <label class="row"><span class="name">Tint</span><input type="range" id="tint" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span><button class="reset-one" data-reset="tint" title="Reset Tint">↺</button></label>
+        <label class="row"><span class="name">Contrast</span><input type="range" id="contrast" min="0.4" max="2" step="0.02" value="1"><span class="val">1.00</span><button class="reset-one" data-reset="contrast" title="Reset Contrast">↺</button></label>
+        <label class="row"><span class="name">Saturation</span><input type="range" id="saturation" min="0" max="2" step="0.02" value="1"><span class="val">1.00</span><button class="reset-one" data-reset="saturation" title="Reset Saturation">↺</button></label>
+        <label class="row"><span class="name">Shadows</span><input type="range" id="shadows" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span><button class="reset-one" data-reset="shadows" title="Reset Shadows">↺</button></label>
+        <label class="row"><span class="name">Highlights</span><input type="range" id="highlights" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span><button class="reset-one" data-reset="highlights" title="Reset Highlights">↺</button></label>
       </div>
-      <button id="reset-tweaks" style="margin-top:6px">Reset fine-tune</button>
+      <button id="reset-tweaks" style="margin-top:6px">↺ Reset all</button>
     </div>
   </div>
 </main>
@@ -185,7 +201,13 @@ function showWarnings(w) {
   $("warnings").textContent = all.join("\n");
 }
 
-function setCorrectionSummary(s) { $("correction-summary").textContent = s || ""; }
+function setCorrectionSummary(s) {
+  $("correction-summary").textContent = s || "";
+  // Nothing to fix → the strength slider can't do anything; make that obvious.
+  const idle = !!s && s.includes("nothing to fix");
+  $("correction-strength").disabled = idle;
+  $("correction-strength").style.opacity = idle ? 0.35 : 1;
+}
 
 // --- drop zones ---
 for (const kind of ["reference", "frame"]) {
@@ -236,6 +258,7 @@ $("analyze").onclick = async () => {
     setCorrectionSummary(out.correction_summary);
     resetTweakSliders();
     $("tweaks").style.display = "";
+    renderLooks();
     refreshPreview();
   } catch (e) { setError(e.message); }
   finally { $("analyze").disabled = false; updateButtons(); }
@@ -250,13 +273,15 @@ async function pushOptions(payload) {
     refreshPreview();
   } catch (e) { setError(e.message); }
 }
-$("auto-correct").onchange = () => pushOptions({ auto_correct: $("auto-correct").checked });
-$("keep-luma").onchange = () => pushOptions({ keep_luma: $("keep-luma").checked });
+$("auto-correct").onchange = () => { markDiverged(); pushOptions({ auto_correct: $("auto-correct").checked }); };
+$("keep-luma").onchange = () => { markDiverged(); pushOptions({ keep_luma: $("keep-luma").checked }); };
 $("correction-strength").oninput = () => {
   $("correction-val").textContent = Math.round($("correction-strength").value * 100) + "%";
 };
-$("correction-strength").onchange = () =>
+$("correction-strength").onchange = () => {
+  markDiverged();
   pushOptions({ correction_strength: +$("correction-strength").value });
+};
 
 // --- fine-tune sliders ---
 const TWEAKS = { temperature: 0, tint: 0, contrast: 1, saturation: 1, shadows: 0, highlights: 0 };
@@ -285,9 +310,18 @@ async function pushTweaks() {
 for (const k of Object.keys(TWEAKS)) {
   const el = $(k);
   el.oninput = () => { el.nextElementSibling.textContent = (+el.value).toFixed(2); };
-  el.onchange = pushTweaks;
+  el.onchange = () => { markDiverged(); pushTweaks(); };
 }
-$("reset-tweaks").onclick = () => resetTweakSliders();
+$("reset-tweaks").onclick = () => { markDiverged(); resetTweakSliders(); };
+for (const btn of document.querySelectorAll(".reset-one")) {
+  btn.onclick = e => {
+    e.preventDefault();
+    const k = btn.dataset.reset;
+    setSlider(k, TWEAKS[k]);
+    markDiverged();
+    pushTweaks();
+  };
+}
 
 // --- preview ---
 let previewTimer = null;
@@ -304,6 +338,7 @@ function refreshPreview() {
 
 $("strength").oninput = () => {
   $("strength-val").textContent = Math.round($("strength").value * 100) + "%";
+  markDiverged();
   refreshPreview();
 };
 
@@ -322,8 +357,12 @@ wrap.onpointermove = e => {
   $("wipe-handle").style.left = pct + "%";
 };
 
-// --- A/B/C save slots (this session) ---
+// --- saved looks (this session) ---
+// One button saves the current look to the next free chip (A/B/C).
+// Click a chip to flip back to that look; × forgets it.
 const SLOT_NAMES = ["A", "B", "C"];
+let activeLook = null;
+
 function currentSettings() {
   const tweaks = {};
   for (const k of Object.keys(TWEAKS)) tweaks[k] = +$(k).value;
@@ -351,40 +390,59 @@ async function loadSettings(s) {
   await pushTweaks();
 }
 
-function slotKey(n) { return "lutmatch-slot-" + n; }
+function lookKey(n) { return "lutmatch-look-" + n; }
 
-function renderSlots(activeName) {
+function renderLooks() {
+  let anyFree = false, anyFilled = false;
   for (const n of SLOT_NAMES) {
-    const el = $("slot-" + n);
-    el.classList.toggle("filled", !!sessionStorage.getItem(slotKey(n)));
-    el.classList.toggle("active", n === activeName);
+    const chip = $("chip-" + n);
+    const filled = !!sessionStorage.getItem(lookKey(n));
+    chip.classList.toggle("filled", filled);
+    chip.classList.toggle("active", filled && n === activeLook);
+    if (filled) {
+      anyFilled = true;
+      chip.innerHTML = `Look ${n} <button class="clear" title="Forget look ${n}">×</button>`;
+      chip.querySelector(".clear").onclick = e => {
+        e.stopPropagation();
+        sessionStorage.removeItem(lookKey(n));
+        if (activeLook === n) activeLook = null;
+        renderLooks();
+      };
+    } else {
+      anyFree = true;
+      chip.innerHTML = "";
+    }
   }
+  $("looks-hint").style.display = anyFilled ? "none" : "";
+  const save = $("save-look");
+  save.disabled = !state.ready || !anyFree;
+  save.title = anyFree ? "Save the current look to a chip" : "All 3 chips used — × one to free it";
 }
+
+$("save-look").onclick = () => {
+  const free = SLOT_NAMES.find(n => !sessionStorage.getItem(lookKey(n)));
+  if (!free) return;
+  sessionStorage.setItem(lookKey(free), JSON.stringify(currentSettings()));
+  activeLook = free;
+  renderLooks();
+};
 
 for (const n of SLOT_NAMES) {
-  const div = document.createElement("div");
-  div.className = "slot"; div.id = "slot-" + n;
-  const load = document.createElement("button");
-  load.className = "load"; load.textContent = n; load.title = "Load " + n;
-  load.onclick = async () => {
-    const raw = sessionStorage.getItem(slotKey(n));
-    if (!raw) { setError("Slot " + n + " is empty — press its save button first."); return; }
+  $("chip-" + n).onclick = async () => {
+    const raw = sessionStorage.getItem(lookKey(n));
+    if (!raw) return;
     setError("");
     await loadSettings(JSON.parse(raw));
-    renderSlots(n);
+    activeLook = n;
+    renderLooks();
   };
-  const save = document.createElement("button");
-  save.className = "save"; save.textContent = "save"; save.title = "Save current settings to " + n;
-  save.onclick = () => {
-    if (!state.ready) { setError("Nothing to save yet — run Match colors first."); return; }
-    setError("");
-    sessionStorage.setItem(slotKey(n), JSON.stringify(currentSettings()));
-    renderSlots(n);
-  };
-  div.append(load, save);
-  $("slots").appendChild(div);
 }
-renderSlots(null);
+
+// Any manual adjustment means you've left the saved look.
+function markDiverged() {
+  if (activeLook !== null) { activeLook = null; renderLooks(); }
+}
+renderLooks();
 
 // --- export & quit ---
 $("export").onclick = () => {
@@ -409,7 +467,7 @@ $("quit").onclick = async () => {
       refreshPreview();
       updateButtons();
     }
-    renderSlots(null);
+    renderLooks();
   } catch {}
 })();
 </script>
