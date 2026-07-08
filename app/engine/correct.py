@@ -50,6 +50,25 @@ class Correction:
             and abs(self.gamma_exp - 1) < 1e-3
         )
 
+    def describe(self) -> str:
+        """Human-readable summary of what the correction is doing."""
+        if self.is_identity():
+            return "frame is technically clean — nothing to fix"
+        parts = []
+        if abs(self.scale - 1) >= 1e-3 or abs(self.offset) >= 1e-3:
+            parts.append(f"levels ×{self.scale:.2f}")
+        wb_bits = [
+            f"{ch}{(g - 1) * 100:+.0f}%"
+            for ch, g in zip("RGB", self.wb_gains)
+            if abs(g - 1) >= 0.005
+        ]
+        if wb_bits:
+            parts.append("WB " + " ".join(wb_bits))
+        if abs(self.gamma_exp - 1) >= 1e-3:
+            direction = "brighter" if self.gamma_exp < 1 else "darker"
+            parts.append(f"exposure γ{self.gamma_exp:.2f} ({direction})")
+        return "fixing: " + " · ".join(parts)
+
 
 def _wb_from_neutrals(px: np.ndarray) -> np.ndarray:
     """Gains from near-neutral pixels; gray-world fallback; conservative caps."""

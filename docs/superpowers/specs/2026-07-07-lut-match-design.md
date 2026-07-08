@@ -107,3 +107,14 @@ Reviewed as a colorist; implemented the core color-science fixes plus polish:
 6. **LUT resolution option**: 33-pt or 65-pt export (`/export?size=`), selector in the UI.
 
 Deferred by JZ for later: live scopes (waveform/vectorscope), correction-only A/B compare.
+
+## Revisions — 2026-07-08 (round 3: pure-math engine)
+
+1. **AI/vision layer removed entirely** (JZ's decision after trade-off discussion): `app/vision/`, `config.toml`, CLI-agent and Ollama support deleted. The app is now 100% self-contained math — no keys, no CLIs, no network.
+2. **Band-wise match** replaces both the DNA mode and the global literal match: shadows/mids/highlights each get their own Monge-Kantorovich transform, blended smoothly by pixel luma (LUT-bakeable). Captures tonally split looks (warm highlights/cool shadows) that global statistics cannot. Plus a "Keep original brightness" option that transfers the palette but preserves the footage's luma structure.
+3. **Correction is no longer silent** (root cause of "does nothing" report: the deadband). `Correction.describe()` produces e.g. "fixing: levels ×1.26 · WB R+3% B−7% · exposure γ0.70 (brighter)" or "frame is technically clean — nothing to fix"; shown in the UI. The auto-correct checkbox and strength slider are now live (`/options` recomputes) — no re-analyze needed.
+4. **Hover wipe**: the before/after divider follows the mouse; no click-drag (which was grabbing the image itself).
+5. **Fine-tune card moved below the preview** (2-column slider grid) — adjust while watching.
+6. **A/B/C compare slots** (sessionStorage): save/load full slider state for quick look comparison.
+7. **33/65 selector removed** from UI (server still accepts `size=`).
+8. **`LUT Match.app`** double-clickable bundle (plain Info.plist + shell launcher; reuses a running server, first-run venv setup with notification) + in-app **Quit** button (`/shutdown`).

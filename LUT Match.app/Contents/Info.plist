@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>LUT Match</string>
+  <key>CFBundleDisplayName</key><string>LUT Match</string>
+  <key>CFBundleExecutable</key><string>lutmatch</string>
+  <key>CFBundleIdentifier</key><string>local.jz.lutmatch</string>
+  <key>CFBundleVersion</key><string>1.0</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>LSBackgroundOnly</key><false/>
+</dict>
+</plist>

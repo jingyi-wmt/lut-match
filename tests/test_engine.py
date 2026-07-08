@@ -2,7 +2,12 @@ import numpy as np
 import pytest
 
 from app.engine.lut import apply_cube, bake_lut, read_cube, write_cube
-from app.engine.match import apply_match, mkl_transform
+from app.engine.match import (
+    apply_banded_match,
+    apply_match,
+    banded_mkl_transform,
+    mkl_transform,
+)
 from app.engine.recipe import RGB, CurvePoint, GradingRecipe, SplitTone
 from app.engine.render import apply_recipe
 
@@ -99,6 +104,58 @@ class TestMatch:
         A, b = mkl_transform(frame, ref)
         out = apply_match(np.clip(frame, 0, 1), A, b)
         assert abs(float(out.mean()) - float(np.clip(ref, 0, 1).mean())) < 0.03
+
+
+class TestBandedMatch:
+    def test_banded_self_match_is_near_identity(self):
+        img = random_image(20000)
+        transforms = banded_mkl_transform(img, img)
+        out = apply_banded_match(img, transforms)
+        np.testing.assert_allclose(out, img, atol=0.02)
+
+    def test_split_tone_reference_shifts_bands_oppositely(self):
+        # Reference: warm highlights, cool shadows. A global transform can't
+        # push the frame's shadows and highlights in opposite directions.
+        n = 20000
+        luma = rng.uniform(0, 1, n).astype(np.float32)
+        warm_cool = np.stack([
+            0.25 + 0.7 * luma + 0.15 * luma,          # red rises with luma
+            0.25 + 0.7 * luma,
+            0.25 + 0.7 * luma + 0.15 * (1 - luma),    # blue rises in shadows
+        ], axis=1)
+        ref = np.clip(warm_cool + rng.normal(0, 0.02, (n, 3)), 0, 1).astype(np.float32)
+
+        gray = np.clip(
+            np.repeat(rng.uniform(0.05, 0.95, (n, 1)), 3, axis=1)
+            + rng.normal(0, 0.01, (n, 3)), 0, 1
+        ).astype(np.float32)
+
+        transforms = banded_mkl_transform(gray, ref)
+        out = apply_banded_match(gray, transforms)
+        l = gray @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+        shadows = out[l < 0.25]
+        highlights = out[l > 0.75]
+        assert float((shadows[:, 2] - shadows[:, 0]).mean()) > 0.02   # blue-shifted shadows
+        assert float((highlights[:, 0] - highlights[:, 2]).mean()) > 0.02  # warm highlights
+
+    def test_keep_luma_preserves_brightness(self):
+        frame = random_image(20000)
+        ref = np.clip(rng.normal(0.7, 0.1, (20000, 3)), 0, 1).astype(np.float32)  # much brighter ref
+        transforms = banded_mkl_transform(frame, ref)
+        out = apply_banded_match(frame, transforms, keep_luma=True)
+        luma_vec = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+        # Compare away from the clip boundaries, where luma is exactly preserved.
+        inner = (frame @ luma_vec > 0.2) & (frame @ luma_vec < 0.8)
+        np.testing.assert_allclose(
+            (out @ luma_vec)[inner], (frame @ luma_vec)[inner], atol=0.05
+        )
+
+    def test_strength_zero_is_noop(self):
+        frame = random_image(5000)
+        ref = np.clip(rng.normal(0.7, 0.2, (5000, 3)), 0, 1).astype(np.float32)
+        transforms = banded_mkl_transform(frame, ref)
+        out = apply_banded_match(frame, transforms, strength=0.0)
+        np.testing.assert_allclose(out, frame, atol=1e-5)
 
 
 class TestLut:

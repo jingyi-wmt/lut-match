@@ -1,0 +1,28 @@
+#!/bin/zsh
+# LUT Match launcher — double-click the app to start.
+URL="http://127.0.0.1:8765"
+
+# Locate the project: normally the bundle sits inside the lut-match folder;
+# if the app was moved (e.g. to /Applications), fall back to the known path.
+PROJECT="$(cd "$(dirname "$0")/../../.." && pwd)"
+if [ ! -f "$PROJECT/requirements.txt" ]; then
+  PROJECT="$HOME/Documents/Local AI folder/lut-match"
+fi
+
+# Already running? Just open the browser.
+if curl -s -o /dev/null --max-time 1 "$URL/status"; then
+  open "$URL"
+  exit 0
+fi
+
+cd "$PROJECT" || { osascript -e 'display alert "LUT Match" message "Could not find the lut-match folder."'; exit 1; }
+
+if [ ! -d .venv ]; then
+  osascript -e 'display notification "First run: setting up (about a minute)…" with title "LUT Match"'
+  python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt || {
+    osascript -e 'display alert "LUT Match" message "Setup failed. Python 3.12+ is required."'; exit 1;
+  }
+fi
+
+( sleep 1.5 && open "$URL" ) &
+exec .venv/bin/uvicorn app.server:app --host 127.0.0.1 --port 8765
