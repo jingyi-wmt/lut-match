@@ -125,3 +125,18 @@ Deferred by JZ for later: live scopes (waveform/vectorscope), correction-only A/
 2. **Responsive preview**: preview width capped at `min(100%, 58vh × 16/9)` so it always fits the window; single-column layout under 900px, no horizontal scroll.
 3. **Per-slider ↺ reset buttons** on all six fine-tune sliders, plus "Reset all".
 4. **Saved-looks redesign** (was confusing A/save | B/save | C/save): one "📌 Save look" button pins the current look to the next free chip (A/B/C); chips appear only once used; click a chip to flip back; × forgets it; any manual adjustment un-highlights the active chip (you've diverged). Hint text shown until the first save.
+
+## Revisions — 2026-07-08 (round 5: viewport-fit workspace)
+
+Design-critique surfaced that the "4 · Fine-tune" panel fell below the fold unless the
+window was maximized. Fixed by turning the desktop layout into a fixed-height cockpit:
+- `body` is a flex column at `100dvh` with `overflow:hidden`; `main` fills the remainder.
+- The preview card flexes smaller (`flex:1 1 0`) while the Strength row, Export/Save-look
+  row, and the Fine-tune card are `flex:0 0 auto` — always pinned on-screen.
+- Pure-CSS containment of a 16:9 box in a flexible parent distorts at some window shapes,
+  so `fitPreview()` (JS) sizes `.preview-wrap` to `min(availW, availH*16/9)` on load, on
+  resize, on fullscreen change, and after each preview refresh — always a true 16:9.
+- Preview floors at 120px tall; `.col-left`/`.col-right` scroll internally as a last resort.
+- Under 900px the height lock releases (natural document scroll).
+- Verified Fine-tune fully visible + correct 1.78 ratio + no h-scroll at viewport heights
+  900/820/700/560; hover-wipe still tracks. Also bumped the wipe label 10px→11px.
