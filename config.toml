@@ -14,6 +14,3 @@ provider = "claude"
 # model = "llava"
 # base_url = "http://localhost:11434"
 
-[premiere]
-# Path to the .mcp.json that defines the premiere MCP server.
-mcp_json = "/Volumes/WMT_FY27/Library/AI/assistant-video-editor/.mcp.json"

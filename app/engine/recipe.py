@@ -49,6 +49,9 @@ class GradingRecipe(BaseModel):
     contrast: float = Field(default=1.0, ge=0.25, le=3.0)     # around pivot 0.435
     saturation: float = Field(default=1.0, ge=0.0, le=3.0)
 
+    shadows: float = Field(default=0.0, ge=-1.0, le=1.0)      # + lift / - crush shadow region
+    highlights: float = Field(default=0.0, ge=-1.0, le=1.0)   # + boost / - recover highlights
+
     # Per-hue saturation multipliers, band order = HUE_BANDS.
     hue_saturation: list[float] = Field(default_factory=lambda: [1.0] * 6)
 

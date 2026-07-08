@@ -13,13 +13,13 @@ from PIL import Image
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from app.engine.correct import Correction, apply_correction, compute_correction
 from app.engine.io import downsample_for_analysis, load_image
 from app.engine.logspace import FOOTAGE_TYPES, to_display
 from app.engine.lut import bake_lut, write_cube
 from app.engine.match import apply_match, mkl_transform
 from app.engine.recipe import GradingRecipe
 from app.engine.render import apply_recipe
-from app.premiere import DEFAULT_MCP_JSON, PremiereError, capture_frame
 from app.vision.provider import VisionError
 from app.vision.registry import build_provider
 
@@ -43,6 +43,8 @@ class Session:
     frame: np.ndarray | None = None
     footage_type: str = "rec709"
     recipe: GradingRecipe | None = None
+    tweaks: GradingRecipe = GradingRecipe()
+    correction: Correction | None = None
     match_params: tuple[np.ndarray, np.ndarray] | None = None
     warnings: dict[str, list[str]] = {}
 
@@ -71,12 +73,18 @@ def _display_frame() -> np.ndarray:
 
 
 def _grade(pixels_display: np.ndarray, mode: str, strength: float) -> np.ndarray:
+    """Correction first (fix lighting), match second, user fine-tune last."""
+    out = pixels_display
+    if S.correction is not None:
+        out = apply_correction(out, S.correction)
     if mode == "match":
         _require(S.match_params is not None, "Literal match not computed yet")
         A, b = S.match_params
-        return apply_match(pixels_display, A, b, strength)
-    _require(S.recipe is not None, "No recipe yet — run Analyze first")
-    return apply_recipe(pixels_display, S.recipe, strength)
+        out = apply_match(out, A, b, strength)
+    else:
+        _require(S.recipe is not None, "No recipe yet — run Analyze first")
+        out = apply_recipe(out, S.recipe, strength)
+    return apply_recipe(out, S.tweaks)
 
 
 @app.get("/")
@@ -102,22 +110,9 @@ async def upload(kind: str, file: UploadFile):
     return {"ok": True, "warnings": img.warnings}
 
 
-@app.post("/grab-frame")
-async def grab_frame():
-    mcp_json = Path(load_config().get("premiere", {}).get("mcp_json", DEFAULT_MCP_JSON))
-    try:
-        png = await run_in_threadpool(capture_frame, mcp_json)
-    except PremiereError as e:
-        raise HTTPException(502, str(e))
-    img = load_image(png)
-    S.frame = img.pixels
-    S.match_params = None
-    S.warnings["frame"] = img.warnings
-    return {"ok": True, "warnings": img.warnings}
-
-
 class AnalyzeRequest(BaseModel):
     footage_type: str = "rec709"
+    auto_correct: bool = True
 
 
 @app.post("/analyze")
@@ -126,11 +121,16 @@ async def analyze(req: AnalyzeRequest):
     _require(S.frame is not None, "Provide a footage frame first")
     _require(req.footage_type in FOOTAGE_TYPES, f"footage_type must be one of {FOOTAGE_TYPES}")
     S.footage_type = req.footage_type
+    S.tweaks = GradingRecipe()
 
     display = _display_frame()
 
+    # Correction first: fix the footage's lighting, then match the look on top.
+    S.correction = compute_correction(display) if req.auto_correct else None
+    corrected = apply_correction(display, S.correction) if S.correction else display
+
     # Literal match is always computed (cheap) — used as mode and fallback.
-    A, b = mkl_transform(display, S.reference)
+    A, b = mkl_transform(corrected, S.reference)
     S.match_params = (A, b)
 
     provider = build_provider(load_config())
@@ -140,7 +140,7 @@ async def analyze(req: AnalyzeRequest):
     tmp = OUTPUT_DIR / "tmp"
     tmp.mkdir(parents=True, exist_ok=True)
     ref_path, frame_path = tmp / "reference.png", tmp / "frame.png"
-    for path, pixels in ((ref_path, S.reference), (frame_path, display)):
+    for path, pixels in ((ref_path, S.reference), (frame_path, corrected)):
         small = downsample_for_analysis(pixels)
         Image.fromarray((np.clip(small, 0, 1) * 255).astype(np.uint8)).save(path)
 
@@ -159,6 +159,13 @@ class RecipeUpdate(BaseModel):
 @app.post("/recipe")
 def update_recipe(req: RecipeUpdate):
     S.recipe = req.recipe
+    return {"ok": True}
+
+
+@app.post("/tweaks")
+def update_tweaks(req: RecipeUpdate):
+    """User fine-tune layer, applied after the match in every mode."""
+    S.tweaks = req.recipe
     return {"ok": True}
 
 
@@ -205,6 +212,7 @@ def status():
         "frame": S.frame is not None,
         "footage_type": S.footage_type,
         "recipe": S.recipe.model_dump() if S.recipe else None,
+        "auto_correct": S.correction is not None,
         "warnings": S.warnings,
         "provider": provider.name if provider else None,
         "footage_types": FOOTAGE_TYPES,

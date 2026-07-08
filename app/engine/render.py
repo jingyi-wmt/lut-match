@@ -52,6 +52,15 @@ def _tone_curve(img: np.ndarray, recipe: GradingRecipe) -> np.ndarray:
     return img + delta[..., None]
 
 
+def _shadows_highlights(img: np.ndarray, recipe: GradingRecipe) -> np.ndarray:
+    if recipe.shadows == 0.0 and recipe.highlights == 0.0:
+        return img
+    luma = np.clip(img @ _LUMA, 0.0, 1.0)
+    shadow_w = ((1.0 - luma) ** 2)[..., None]      # strongest in blacks
+    highlight_w = (luma ** 2)[..., None]           # strongest in whites
+    return img + 0.25 * (recipe.shadows * shadow_w + recipe.highlights * highlight_w)
+
+
 def _split_tone(img: np.ndarray, recipe: GradingRecipe) -> np.ndarray:
     st = recipe.split_tone
     if st.amount <= 0.0:
@@ -108,6 +117,7 @@ def apply_recipe(img: np.ndarray, recipe: GradingRecipe, strength: float = 1.0) 
     out = _white_balance(src, recipe.temperature, recipe.tint)
     out = _lift_gamma_gain(out, recipe)
     out = _contrast(out, recipe.contrast)
+    out = _shadows_highlights(out, recipe)
     out = _tone_curve(out, recipe)
     out = _split_tone(out, recipe)
     out = _saturation(out, recipe)

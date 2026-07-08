@@ -17,6 +17,8 @@ def client(monkeypatch, tmp_path):
     server.S.reference = None
     server.S.frame = None
     server.S.recipe = None
+    server.S.tweaks = GradingRecipe()
+    server.S.correction = None
     server.S.match_params = None
     server.S.footage_type = "rec709"
     server.S.warnings = {}
@@ -62,7 +64,7 @@ class TestFlow:
     def test_export_lut_matches_preview_math(self, client, tmp_path):
         upload(client, "reference", (200, 120, 60))
         upload(client, "frame", (100, 110, 140))
-        client.post("/analyze", json={"footage_type": "rec709"})
+        client.post("/analyze", json={"footage_type": "rec709", "auto_correct": False})
 
         cube_path = tmp_path / "out.cube"
         cube_path.write_bytes(client.get("/export", params={"mode": "match"}).content)
@@ -104,3 +106,26 @@ class TestFlow:
     def test_status(self, client):
         st = client.get("/status").json()
         assert st["reference"] is False and st["provider"] is None
+
+    def test_auto_correct_fixes_dark_frame(self, client):
+        upload(client, "reference", (200, 120, 60))
+        upload(client, "frame", (40, 42, 60))  # underexposed, blue-cast frame
+        out = client.post("/analyze", json={"footage_type": "rec709", "auto_correct": True}).json()
+        assert out["mode"] == "match"
+        assert server.S.correction is not None and not server.S.correction.is_identity()
+
+    def test_auto_correct_off(self, client):
+        upload(client, "reference", (200, 120, 60))
+        upload(client, "frame", (100, 110, 140))
+        client.post("/analyze", json={"footage_type": "rec709", "auto_correct": False})
+        assert server.S.correction is None
+
+    def test_tweaks_layer_applies_in_match_mode(self, client):
+        upload(client, "reference", (200, 120, 60))
+        upload(client, "frame", (100, 110, 140))
+        client.post("/analyze", json={"footage_type": "rec709", "auto_correct": False})
+        base = client.get("/preview", params={"mode": "match"}).content
+        r = client.post("/tweaks", json={"recipe": {"shadows": 0.8, "highlights": -0.5}})
+        assert r.status_code == 200
+        tweaked = client.get("/preview", params={"mode": "match"}).content
+        assert tweaked != base

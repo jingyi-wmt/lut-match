@@ -25,7 +25,7 @@
   .card h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase;
              letter-spacing: 1px; color: var(--dim); }
 
-  .drop { border: 1.5px dashed #3a4050; border-radius: 8px; min-height: 110px;
+  .drop { border: 1.5px dashed #3a4050; border-radius: 8px; aspect-ratio: 16 / 9;
           display: flex; align-items: center; justify-content: center; cursor: pointer;
           color: var(--dim); text-align: center; padding: 8px; position: relative;
           background-size: cover; background-position: center; transition: border-color .15s; }
@@ -40,29 +40,35 @@
   button.primary:disabled { opacity: .4; cursor: default; }
   button.wide { width: 100%; margin-top: 8px; }
 
-  select, input[type=number] { background: var(--panel2); color: var(--text);
+  select { background: var(--panel2); color: var(--text);
     border: 1px solid #3a4050; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
   label.row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; gap: 10px; }
+  label.row span.name { min-width: 74px; }
   input[type=range] { flex: 1; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
   .val { width: 44px; text-align: right; color: var(--accent2); font-variant-numeric: tabular-nums; }
 
-  #warnings { color: var(--warn); font-size: 12px; white-space: pre-line; }
-  #note { color: var(--dim); font-size: 12px; }
-  #look { font-size: 13px; color: var(--text); font-style: italic; }
-  #error { color: #e86a6a; font-size: 12px; white-space: pre-line; }
+  #warnings { color: var(--warn); font-size: 12px; white-space: pre-line; margin: 6px 0 0; }
+  #note { color: var(--dim); font-size: 12px; margin: 8px 0 0; }
+  #look { font-size: 13px; font-style: italic; margin: 6px 0 0; }
+  #error { color: #e86a6a; font-size: 12px; white-space: pre-line; margin: 6px 0 0; }
 
+  .preview-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .preview-head h2 { margin: 0; }
+  #fullscreen { padding: 4px 10px; font-size: 12px; }
   .preview-wrap { position: relative; border-radius: 8px; overflow: hidden;
-                  background: #000; min-height: 300px; user-select: none; }
-  .preview-wrap img { display: block; width: 100%; }
-  #before { position: absolute; inset: 0; width: 100%; clip-path: inset(0 calc(100% - var(--wipe, 30%)) 0 0); }
+                  background: #000; aspect-ratio: 16 / 9; user-select: none; }
+  .preview-wrap:fullscreen { border-radius: 0; aspect-ratio: auto; }
+  .preview-wrap img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  #before { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--wipe, 30%)) 0 0); }
   #wipe-handle { position: absolute; top: 0; bottom: 0; left: var(--wipe, 30%); width: 2px;
                  background: var(--accent); cursor: ew-resize; }
   #wipe-handle::after { content: "◂ before | after ▸"; position: absolute; top: 8px; left: 6px;
                         font-size: 10px; color: var(--accent); white-space: nowrap; }
   .mode-row { display: flex; gap: 8px; margin-top: 10px; }
   .mode-row button.active { border-color: var(--accent2); color: var(--accent2); }
-  .placeholder { display:flex; align-items:center; justify-content:center; color: var(--dim);
-                 min-height: 300px; }
+  .placeholder { position: absolute; inset: 0; display: flex; align-items: center;
+                 justify-content: center; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -79,9 +85,8 @@
     </div>
     <div class="card">
       <h2>2 · Footage frame</h2>
-      <button class="wide" id="grab">🎬 Grab frame from Premiere playhead</button>
-      <div class="drop" id="drop-frame" style="margin-top:8px">…or drop a still frame<input type="file" accept="image/*"></div>
-      <label class="row" style="margin-top:10px">Footage type
+      <div class="drop" id="drop-frame">Drop a still frame of your footage<input type="file" accept="image/*"></div>
+      <label class="row" style="margin-top:10px"><span class="name">Footage type</span>
         <select id="footage-type">
           <option value="rec709">Rec.709 / normal</option>
           <option value="slog3">Sony S-Log3</option>
@@ -93,6 +98,9 @@
     </div>
     <div class="card">
       <h2>3 · Extract DNA</h2>
+      <label class="row" style="margin:0 0 8px"><span>Auto-correct lighting first</span>
+        <input type="checkbox" id="auto-correct" checked>
+      </label>
       <button class="primary wide" id="analyze" disabled>Analyze reference look</button>
       <p id="note"></p>
       <p id="look"></p>
@@ -100,24 +108,30 @@
       <p id="error"></p>
     </div>
     <div class="card" id="tweaks" style="display:none">
-      <h2>4 · Tune</h2>
-      <label class="row">Temp <input type="range" id="temperature" min="-1" max="1" step="0.02"><span class="val"></span></label>
-      <label class="row">Tint <input type="range" id="tint" min="-1" max="1" step="0.02"><span class="val"></span></label>
-      <label class="row">Contrast <input type="range" id="contrast" min="0.4" max="2" step="0.02"><span class="val"></span></label>
-      <label class="row">Saturation <input type="range" id="saturation" min="0" max="2" step="0.02"><span class="val"></span></label>
+      <h2>4 · Fine-tune</h2>
+      <label class="row"><span class="name">Temp</span><input type="range" id="temperature" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
+      <label class="row"><span class="name">Tint</span><input type="range" id="tint" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
+      <label class="row"><span class="name">Contrast</span><input type="range" id="contrast" min="0.4" max="2" step="0.02" value="1"><span class="val">1.00</span></label>
+      <label class="row"><span class="name">Saturation</span><input type="range" id="saturation" min="0" max="2" step="0.02" value="1"><span class="val">1.00</span></label>
+      <label class="row"><span class="name">Shadows</span><input type="range" id="shadows" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
+      <label class="row"><span class="name">Highlights</span><input type="range" id="highlights" min="-1" max="1" step="0.02" value="0"><span class="val">0.00</span></label>
+      <button class="wide" id="reset-tweaks">Reset fine-tune</button>
     </div>
   </div>
 
   <div class="col">
     <div class="card">
-      <h2>Preview — drag the orange line</h2>
+      <div class="preview-head">
+        <h2>Preview — drag the orange line</h2>
+        <button id="fullscreen" title="Full screen">⛶ Full screen</button>
+      </div>
       <div class="preview-wrap" id="preview-wrap">
         <div class="placeholder" id="placeholder">load a reference and a frame, then Analyze</div>
         <img id="after" style="display:none" alt="">
         <img id="before" style="display:none" alt="">
         <div id="wipe-handle" style="display:none"></div>
       </div>
-      <label class="row" style="margin-top:12px">Strength
+      <label class="row" style="margin-top:12px"><span class="name">Strength</span>
         <input type="range" id="strength" min="0" max="1" step="0.02" value="1"><span class="val" id="strength-val">100%</span>
       </label>
       <div class="mode-row">
@@ -131,7 +145,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const state = { reference: false, frame: false, mode: "dna", ready: false, recipe: null };
+const state = { reference: false, frame: false, mode: "dna", ready: false };
 
 function setError(msg) { $("error").textContent = msg || ""; }
 function setNote(msg) { $("note").textContent = msg || ""; }
@@ -183,24 +197,10 @@ function afterImageSet(kind, warnings) {
   state[kind] = true; state.ready = false;
   const zone = $("drop-" + kind);
   zone.classList.add("filled");
-  zone.style.backgroundImage = `url(/image/${kind === "reference" ? "reference" : "frame"}?t=${Date.now()})`;
+  zone.style.backgroundImage = `url(/image/${kind}?t=${Date.now()})`;
   showWarnings({ [kind]: warnings });
   updateButtons();
 }
-
-// --- premiere grab ---
-$("grab").onclick = async () => {
-  setError(""); $("grab").textContent = "⏳ Asking Premiere…"; $("grab").disabled = true;
-  try {
-    const out = await api("/grab-frame", { method: "POST" });
-    afterImageSet("frame", out.warnings);
-  } catch (e) {
-    setError(e.message + "\n→ You can drop a still frame manually instead.");
-  } finally {
-    $("grab").textContent = "🎬 Grab frame from Premiere playhead";
-    $("grab").disabled = false;
-  }
-};
 
 // --- analyze ---
 $("analyze").onclick = async () => {
@@ -209,42 +209,55 @@ $("analyze").onclick = async () => {
   try {
     const out = await api("/analyze", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ footage_type: $("footage-type").value }),
+      body: JSON.stringify({
+        footage_type: $("footage-type").value,
+        auto_correct: $("auto-correct").checked,
+      }),
     });
     state.ready = true;
     if (out.mode === "dna") {
-      state.mode = "dna"; state.recipe = out.recipe;
+      state.mode = "dna";
       setNote(`DNA extracted via ${out.provider}.`);
       $("look").textContent = "“" + (out.recipe.look_description || "") + "”";
-      bindTweaks(out.recipe);
     } else {
-      state.mode = "match"; state.recipe = null;
-      setNote(out.note); $("look").textContent = ""; $("tweaks").style.display = "none";
+      state.mode = "match";
+      setNote(out.note); $("look").textContent = "";
     }
+    resetTweakSliders();
+    $("tweaks").style.display = "";
     setActiveMode(); refreshPreview();
   } catch (e) { setError(e.message); setNote(""); }
   finally { $("analyze").disabled = false; updateButtons(); }
 };
 
-// --- tweak sliders ---
-const TWEAKS = ["temperature", "tint", "contrast", "saturation"];
-function bindTweaks(recipe) {
-  $("tweaks").style.display = "";
-  for (const k of TWEAKS) {
+// --- fine-tune sliders (separate layer, applies in both modes) ---
+const TWEAKS = { temperature: 0, tint: 0, contrast: 1, saturation: 1, shadows: 0, highlights: 0 };
+
+function resetTweakSliders() {
+  for (const [k, dflt] of Object.entries(TWEAKS)) {
     const el = $(k);
-    el.value = recipe[k];
-    el.nextElementSibling.textContent = (+recipe[k]).toFixed(2);
-    el.oninput = () => { el.nextElementSibling.textContent = (+el.value).toFixed(2); };
-    el.onchange = async () => {
-      state.recipe[k] = +el.value;
-      try {
-        await api("/recipe", { method: "POST", headers: { "Content-Type": "application/json" },
-                               body: JSON.stringify({ recipe: state.recipe }) });
-        refreshPreview();
-      } catch (e) { setError(e.message); }
-    };
+    el.value = dflt;
+    el.nextElementSibling.textContent = (+dflt).toFixed(2);
   }
+  pushTweaks();
 }
+
+async function pushTweaks() {
+  const recipe = {};
+  for (const k of Object.keys(TWEAKS)) recipe[k] = +$(k).value;
+  try {
+    await api("/tweaks", { method: "POST", headers: { "Content-Type": "application/json" },
+                           body: JSON.stringify({ recipe }) });
+    refreshPreview();
+  } catch (e) { setError(e.message); }
+}
+
+for (const k of Object.keys(TWEAKS)) {
+  const el = $(k);
+  el.oninput = () => { el.nextElementSibling.textContent = (+el.value).toFixed(2); };
+  el.onchange = pushTweaks;
+}
+$("reset-tweaks").onclick = resetTweakSliders;
 
 // --- preview ---
 let previewTimer = null;
@@ -263,6 +276,13 @@ function refreshPreview() {
 $("strength").oninput = () => {
   $("strength-val").textContent = Math.round($("strength").value * 100) + "%";
   refreshPreview();
+};
+
+// --- fullscreen ---
+$("fullscreen").onclick = () => {
+  const wrap = $("preview-wrap");
+  if (document.fullscreenElement) document.exitFullscreen();
+  else wrap.requestFullscreen();
 };
 
 // --- wipe handle ---
@@ -284,9 +304,12 @@ function setActiveMode() {
   $("mode-dna").classList.toggle("active", state.mode === "dna");
   $("mode-match").classList.toggle("active", state.mode === "match");
 }
-$("mode-dna").onclick = () => {
-  if (!state.recipe) { setError("No DNA recipe available — run Analyze with a vision provider."); return; }
-  state.mode = "dna"; setActiveMode(); refreshPreview();
+$("mode-dna").onclick = async () => {
+  try {
+    const st = await api("/status");
+    if (!st.recipe) { setError("No DNA recipe available — run Analyze with a vision provider."); return; }
+    state.mode = "dna"; setActiveMode(); refreshPreview();
+  } catch (e) { setError(e.message); }
 };
 $("mode-match").onclick = () => { state.mode = "match"; setActiveMode(); refreshPreview(); };
 

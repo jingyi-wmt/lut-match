@@ -84,3 +84,13 @@ Python 3.12+, deps: `fastapi uvicorn numpy pillow colour-science httpx pydantic 
 4. `premiere.py` + Grab-frame button.
 5. Vision layer: provider abstraction, `claude -p` CLI adapter first (already installed and authenticated on this machine), then the generic CLI-template adapter (code puppy etc.) and optional Ollama; settings panel.
 6. Polish (warnings, naming, run.command) and full end-to-end verification per above.
+
+## Revisions — 2026-07-08 (user feedback round 1)
+
+1. **Premiere MCP integration removed entirely** (JZ prefers dropping still frames manually). `app/premiere.py`, its tests, the `/grab-frame` endpoint, the UI button, the `mcp` dependency, and the `[premiere]` config section are gone.
+2. **Reference/footage panels are 16:9** (`aspect-ratio: 16/9` drop zones), matching video framing.
+3. **Full-screen button** on the preview card (native Fullscreen API on the wipe-compare wrap).
+4. **Correction first, match second**: new `app/engine/correct.py` auto-fixes footage lighting before any look transfer — levels stretch (1st–99th percentile → 0.02–0.95), gray-world white balance, neutral exposure gamma toward middle gray. Global transform, so it bakes into the LUT. UI checkbox "Auto-correct lighting first" (default on).
+5. **Shadow/Highlight fine-tune sliders**, plus the existing temp/tint/contrast/saturation, now form a separate *tweaks layer* (`/tweaks` endpoint, `GradingRecipe` with `shadows`/`highlights` fields) applied after the match in **both** DNA and literal-match modes. The AI recipe is no longer edited by the sliders.
+
+Pipeline is now: footage → log-to-display → auto-correction → DNA recipe or literal match (strength) → user tweaks → .cube.
