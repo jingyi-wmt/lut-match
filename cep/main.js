@@ -41,8 +41,19 @@ function readConfig() {
   }
 }
 
+// Manual timeout instead of AbortSignal.timeout(): CEP's bundled Chromium is
+// version 99, and that static method didn't exist until Chrome 103 — calling
+// it throws synchronously and silently wedges the whole init chain.
+function fetchWithTimeout(url, opts, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, Object.assign({}, opts, { signal: controller.signal })).finally(() =>
+    clearTimeout(timer)
+  );
+}
+
 function serverUp() {
-  return fetch(BASE + "/status", { signal: AbortSignal.timeout(1500) })
+  return fetchWithTimeout(BASE + "/status", {}, 1500)
     .then((r) => r.ok)
     .catch(() => false);
 }
@@ -222,9 +233,16 @@ $("quit-server").onclick = async () => {
 
 async function init() {
   setMsg("");
-  if (await ensureServer()) {
-    showApp();
-    await pingHost();
+  try {
+    if (await ensureServer()) {
+      showApp();
+      await pingHost();
+    }
+  } catch (e) {
+    // Safety net: any unexpected error (e.g. a browser API missing in CEP's
+    // bundled Chromium) surfaces here instead of leaving the yellow
+    // "checking engine…" dot stuck forever with a silent console error.
+    showOffline("Unexpected panel error: " + (e && e.message ? e.message : e));
   }
 }
 init();

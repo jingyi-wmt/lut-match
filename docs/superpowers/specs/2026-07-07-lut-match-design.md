@@ -192,3 +192,18 @@ verifying on-disk: PP 26.0.0 ships CEPHtmlEngine 12.0.1.2; CSXS.12 PlayerDebugMo
 - Verified: 67 tests pass; browser regression (normal + panel modes, both postMessage flows)
   green. In-Premiere steps (panel loads, lmPing, grab, apply) are JZ's to run — apply-to-clip
   is fallback-first by design.
+
+## Bugfix — 2026-07-08 (panel stuck on "checking engine…")
+
+JZ reported the panel stuck at a yellow status dot on first real launch. Root cause
+confirmed (not guessed): the bundled CEF is Chromium **99.2.15.0** (verified via
+`strings` on `Chromium Embedded Framework.framework`), and `AbortSignal.timeout()`
+wasn't added until Chrome 103. Calling it in `serverUp()` threw synchronously, before
+the `fetch().then().catch()` chain existed to catch it — an unhandled rejection that
+silently wedged `init()` at its very first status check, forever.
+
+Fixed: `fetchWithTimeout()` (manual `AbortController` + `setTimeout`) replaces
+`AbortSignal.timeout()`. Also wrapped `init()` in try/catch so any *other* future
+surprise (missing API, unexpected exception) shows a real message in the toolbar
+instead of leaving the dot stuck with no explanation. Re-installed to
+`~/Library/.../CEP/extensions/LUTMatch`.
