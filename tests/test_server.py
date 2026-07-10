@@ -132,6 +132,33 @@ class TestCorrectionUX:
         assert server.S.correction is None
 
 
+class TestPanelEndpoints:
+    def test_frame_from_path(self, client, tmp_path):
+        p = tmp_path / "grabbed.png"
+        p.write_bytes(png_bytes((100, 110, 140)))
+        r = client.post("/frame-from-path", json={"path": str(p)})
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert server.S.frame is not None
+
+    def test_frame_from_missing_path(self, client):
+        r = client.post("/frame-from-path", json={"path": "/tmp/does-not-exist-xyz.png"})
+        assert r.status_code == 400 and "not found" in r.json()["detail"]
+
+    def test_export_file_returns_path(self, client, tmp_path):
+        upload(client, "reference", (200, 120, 60))
+        upload(client, "frame", (100, 110, 140))
+        analyze(client, auto_correct=False)
+        r = client.get("/export-file", params={"strength": 1.0})
+        assert r.status_code == 200
+        import os
+        path = r.json()["path"]
+        assert os.path.isfile(path) and path.endswith(".cube")
+
+    def test_cors_headers_present(self, client):
+        r = client.get("/status", headers={"Origin": "null"})
+        assert r.headers.get("access-control-allow-origin") == "*"
+
+
 class TestOptionsAndTweaks:
     def test_keep_luma_changes_preview(self, client):
         upload(client, "reference", (230, 160, 60))

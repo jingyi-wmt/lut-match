@@ -27,6 +27,15 @@ PREVIEW_MAX = 960
 
 app = FastAPI(title="LUT Match")
 
+# The CEP panel shell runs from file:// (origin "null") and fetches this API.
+# The server binds to 127.0.0.1 only, so permissive CORS exposes nothing
+# beyond this machine.
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
+
 
 class Session:
     reference: np.ndarray | None = None
@@ -116,6 +125,26 @@ async def upload(kind: str, file: UploadFile):
     return {"ok": True, "warnings": img.warnings}
 
 
+class FrameFromPath(BaseModel):
+    path: str
+
+
+@app.post("/frame-from-path")
+def frame_from_path(req: FrameFromPath):
+    """Load a local image file as the footage frame (CEP panel frame-grab)."""
+    path = Path(req.path).expanduser().resolve()
+    _require(path.is_file(), f"file not found: {path}")
+    try:
+        img = load_image(path)
+    except Exception as e:
+        raise HTTPException(400, f"Could not read image: {e}")
+    S.frame = img.pixels
+    S.match_transforms = None
+    S.correction = None
+    S.warnings["frame"] = img.warnings
+    return {"ok": True, "warnings": img.warnings}
+
+
 class AnalyzeRequest(BaseModel):
     footage_type: str = "rec709"
     auto_correct: bool = True
@@ -191,8 +220,7 @@ def preview(strength: float = 1.0):
     return Response(_to_jpeg(graded), media_type="image/jpeg")
 
 
-@app.get("/export")
-def export(strength: float = 1.0, size: int = 33):
+def _bake_to_disk(strength: float, size: int) -> Path:
     _require(S.frame is not None, "no frame")
     _require(size in (17, 33, 65), "size must be 17, 33 or 65")
     footage_type = S.footage_type
@@ -203,8 +231,20 @@ def export(strength: float = 1.0, size: int = 33):
     table = bake_lut(pipeline, size=size)
     OUTPUT_DIR.mkdir(exist_ok=True)
     name = f"{S.reference_name}-match.cube"
-    path = write_cube(table, OUTPUT_DIR / name, title=f"LUT Match — {S.reference_name}")
-    return FileResponse(path, filename=name, media_type="application/octet-stream")
+    return write_cube(table, OUTPUT_DIR / name, title=f"LUT Match — {S.reference_name}")
+
+
+@app.get("/export")
+def export(strength: float = 1.0, size: int = 33):
+    path = _bake_to_disk(strength, size)
+    return FileResponse(path, filename=path.name, media_type="application/octet-stream")
+
+
+@app.get("/export-file")
+def export_file(strength: float = 1.0, size: int = 33):
+    """Bake and return the .cube's absolute path (CEP panel apply-to-clip)."""
+    path = _bake_to_disk(strength, size)
+    return {"ok": True, "path": str(path)}
 
 
 @app.get("/status")

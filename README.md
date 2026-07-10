@@ -45,6 +45,23 @@ lut-match/
   run.command        — Terminal-based launcher (fallback)
 ```
 
+## Premiere Pro panel (experimental — `feature-extension` branch)
+
+LUT Match can also run as a docked panel inside Premiere Pro 2026, with two native buttons:
+
+- **🎬 Grab frame** — exports the frame under the playhead straight into LUT Match (no manual still exports). Note: it grabs the *rendered* timeline frame, so disable any existing grade on the clip first.
+- **🎯 Apply to clip** — exports the LUT and sets it as the selected clip's Lumetri Creative Look. If Premiere's scripting API refuses (it varies by version), you'll get the saved `.cube` path to browse to manually instead.
+
+Install:
+
+```bash
+./cep/install.sh        # copies the panel into ~/Library/.../Adobe/CEP/extensions
+```
+
+Then restart Premiere → **Window → Extensions → LUT Match**. The panel starts the Python engine automatically (it needs the `.venv` to exist — double-click `run.command` once on a fresh machine first).
+
+Unsigned panels require CEP debug mode once per machine: `defaults write com.adobe.CSXS.12 PlayerDebugMode 1`
+
 ## Notes for developers
 
 - No external services, API keys, or AI models are used — the color matching is pure statistics (per-tone-range distribution transfer), not AI-generated.

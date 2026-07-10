@@ -171,3 +171,24 @@ document-flow layout there.
 Verified live at 600×1000 (the reported bug width): no overlap, no horizontal scroll,
 correct top-to-bottom stacking of Reference → Frame → Match → Preview → Fine-tune.
 Re-confirmed the round-5 desktop cockpit behavior (1440×820) is unaffected.
+
+## Revisions — 2026-07-08 (feature-extension branch: Premiere CEP panel)
+
+Native in-app experience for Premiere Pro 2026 via a CEP panel (architecture chosen after
+verifying on-disk: PP 26.0.0 ships CEPHtmlEngine 12.0.1.2; CSXS.12 PlayerDebugMode already 1).
+
+- `cep/` — panel bundle: manifest (PPRO [14.0,99.9], Node enabled), shell `index.html`
+  (toolbar: status dot · Grab frame · Apply to clip · Stop engine) + iframe of
+  `http://127.0.0.1:8765/?panel=1`; `main.js` auto-starts `.venv/bin/uvicorn` using the
+  project path from `config.json` (written by `cep/install.sh`); `host.jsx` ExtendScript
+  (`lmPing` fail-fast probe, `lmGrabFrame` via `exportFramePNG`, `lmApplyLut` via
+  clip.components + QE-DOM effect add, matching QE items by start ticks to skip gaps,
+  with diagnostic property-name dump on failure).
+- Server: `POST /frame-from-path` (panel grab), `GET /export-file` → `{path}` (shared
+  `_bake_to_disk` with `/export`), permissive CORS (loopback-only server; shell runs from file://).
+- UI: `?panel=1` hides header/padding; postMessage protocol — `frame-updated` (refresh frame
+  thumb) and `get-settings`/`settings` (shell learns strength + ready before exporting).
+- CSS: explicit `height:100vh` fallback before `100dvh` (CEP 12 ≈ Chromium 99, no dvh).
+- Verified: 67 tests pass; browser regression (normal + panel modes, both postMessage flows)
+  green. In-Premiere steps (panel loads, lmPing, grab, apply) are JZ's to run — apply-to-clip
+  is fallback-first by design.
