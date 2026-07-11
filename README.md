@@ -47,10 +47,11 @@ lut-match/
 
 ## Premiere Pro panel (experimental — `feature-extension` branch)
 
-LUT Match can also run as a docked panel inside Premiere Pro 2026, with two native buttons:
+LUT Match can also run as a docked panel inside Premiere Pro 2026. Export a still frame from your footage as usual and drag it into the panel's Footage frame drop zone, then:
 
-- **🎬 Grab frame** — exports the frame under the playhead straight into LUT Match (no manual still exports). Note: it grabs the *rendered* timeline frame, so disable any existing grade on the clip first.
 - **🎯 Apply to clip** — exports the LUT and sets it as the selected clip's Lumetri Creative Look. If Premiere's scripting API refuses (it varies by version), you'll get the saved `.cube` path to browse to manually instead.
+
+(An earlier version of this panel had a "Grab frame" button that pulled the playhead frame in directly. It relied on an undocumented Premiere API — `exportFramePNG` — that turned out to be dead in Premiere 26: every call reported success but never wrote a file. Removed rather than left half-working.)
 
 Install:
 

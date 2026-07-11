@@ -207,3 +207,37 @@ Fixed: `fetchWithTimeout()` (manual `AbortController` + `setTimeout`) replaces
 surprise (missing API, unexpected exception) shows a real message in the toolbar
 instead of leaving the dot stuck with no explanation. Re-installed to
 `~/Library/.../CEP/extensions/LUTMatch`.
+
+## Removal — 2026-07-10 (Grab frame retired: dead private API)
+
+"Grab frame" reported "does nothing" on click. Traced live via Premiere's CEP remote-debug
+port (Chrome DevTools Protocol against `localhost:8098`) rather than guessed:
+- Root cause of "does nothing" (no error shown): the engine simply wasn't running at the
+  time — the button is `disabled` by default and only enables once `/status` responds, so
+  a dead engine produces a silent no-op click. Not a code bug on its own.
+- Once the engine was up, the real error surfaced: `seq.exportFramePNG is not a function`.
+  `exportFramePNG` doesn't exist on the standard DOM `Sequence` — but reflection via
+  ExtendScript (`for...in` + `typeof` probing) found it *does* exist as a function on the
+  QE (private/testing) sequence object, `qe.project.getActiveSequence()`.
+- Exhaustively tested against the QE object live: 7+ signature variants (string/number
+  ticks, path-only, swapped argument order, a `Time` object, numbered-sequence filenames),
+  each isolated in its own try/catch. The correct-looking call —
+  `qeSeq.exportFramePNG(ticksString, path)` — returns `true` with no thrown error, but
+  **never writes a file**, even after a 25-second wait. Confirmed independently that both
+  Node's `fs` (panel context) and ExtendScript's `File` object (Premiere's own process)
+  can write to the same directory without issue — so this isn't a permissions problem.
+  Conclusion: `exportFramePNG` is dead/vestigial in Premiere 26.0.0's QE layer.
+- The documented alternative, `app.encoder.encodeSequence()`, does exist and works via
+  Adobe Media Encoder — but AME is installed with no PNG-format preset available anywhere
+  on disk (only video codec `.epr` files from other plugins), meaning a preset would need
+  to be hand-authored against an unfamiliar XML schema, plus AME adds async job-queue
+  handling and a much heavier per-grab cost. JZ chose not to pursue this for now.
+
+**Removed**: the Grab frame button (`cep/index.html`), `grabFrame()`/its wiring
+(`cep/main.js`), `lmGrabFrame()` (`cep/host.jsx`), and the `/frame-from-path` endpoint
++ its tests (`app/server.py`, `tests/test_server.py`) that only existed to receive it.
+**Kept**: Apply to clip (works, verified independently), and the engine
+auto-start/logging machinery (unrelated, still needed).
+
+Workflow going forward: export a still frame from Premiere yourself (unchanged, always
+worked) and drag it into the panel's Footage frame drop zone.

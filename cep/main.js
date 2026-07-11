@@ -3,7 +3,13 @@
  * Responsibilities:
  *  - ensure the Python engine is running (spawn PROJECT/.venv/bin/uvicorn if not)
  *  - embed the web UI (http://127.0.0.1:8765/?panel=1) in the iframe
- *  - native bridges via ExtendScript: grab playhead frame, apply LUT to clip
+ *  - native bridge via ExtendScript: apply the exported LUT to the selected clip
+ *
+ * Grab-frame was removed: it depended on the undocumented QE method
+ * exportFramePNG(), which is dead in Premiere 26 — every call returns true
+ * but never writes a file (confirmed by exhaustive live testing, not a
+ * guess). Export a still frame from Premiere yourself and drag it into the
+ * embedded app instead.
  *
  * The installed panel is a copy in ~/Library/.../CEP/extensions/LUTMatch, so
  * the project location comes from config.json written by install.sh.
@@ -125,7 +131,6 @@ function showOffline(text) {
   $("frame").style.display = "none";
   $("offline").style.display = "flex";
   $("offline-text").textContent = text;
-  $("grab").disabled = true;
   $("apply").disabled = true;
 }
 
@@ -135,7 +140,6 @@ function showApp() {
   const frame = $("frame");
   frame.src = BASE + "/?panel=1";
   frame.style.display = "";
-  $("grab").disabled = false;
   $("apply").disabled = false;
 }
 
@@ -149,47 +153,13 @@ async function pingHost() {
   if (res !== "pong") {
     setMsg(
       "ExtendScript bridge failed (" + String(res).slice(0, 80) + ") — " +
-        "grab/apply disabled; the embedded app still works.",
+        "apply-to-clip disabled; the embedded app still works.",
       true
     );
-    $("grab").disabled = true;
     $("apply").disabled = true;
     return false;
   }
   return true;
-}
-
-// --- grab the frame under the playhead ---
-async function grabFrame() {
-  setMsg("Grabbing frame…");
-  $("grab").disabled = true;
-  try {
-    const path = os.tmpdir() + "/lutmatch_grab_" + Date.now() + ".png";
-    const res = await evalScript('lmGrabFrame("' + path.replace(/"/g, '\\"') + '")');
-    if (res !== "ok") throw new Error(res || "no response from Premiere");
-
-    // exportFramePNG writes asynchronously; wait for the file.
-    let exists = false;
-    for (let i = 0; i < 50 && !exists; i++) {
-      await new Promise((r) => setTimeout(r, 100));
-      exists = fs.existsSync(path) && fs.statSync(path).size > 0;
-    }
-    if (!exists) throw new Error("Premiere exported no frame (file never appeared)");
-
-    const resp = await fetch(BASE + "/frame-from-path", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: path }),
-    });
-    if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
-
-    $("frame").contentWindow.postMessage({ type: "frame-updated" }, "*");
-    setMsg("Frame grabbed. Note: grabs the rendered timeline — disable existing grades first.");
-  } catch (e) {
-    setMsg("Grab failed: " + e.message, true);
-  } finally {
-    $("grab").disabled = false;
-  }
 }
 
 // --- export the LUT and apply it to the selected clip ---
@@ -242,7 +212,6 @@ async function applyLut() {
 }
 
 // --- wiring ---
-$("grab").onclick = grabFrame;
 $("apply").onclick = applyLut;
 $("retry").onclick = init;
 $("quit-server").onclick = async () => {

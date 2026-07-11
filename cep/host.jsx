@@ -5,18 +5,6 @@ function lmPing() {
   return "pong";
 }
 
-// Export the frame under the playhead as a PNG at `path`.
-function lmGrabFrame(path) {
-  try {
-    var seq = app.project.activeSequence;
-    if (!seq) return "error: no active sequence — open a sequence first";
-    seq.exportFramePNG(seq.getPlayerPosition().ticks, path);
-    return "ok";
-  } catch (e) {
-    return "error: " + e.toString();
-  }
-}
-
 // Find the selected video clip in the active sequence.
 // Returns {trackIndex, clip} or null.
 function lmFindSelectedClip(seq) {

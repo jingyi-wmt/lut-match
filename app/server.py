@@ -125,26 +125,6 @@ async def upload(kind: str, file: UploadFile):
     return {"ok": True, "warnings": img.warnings}
 
 
-class FrameFromPath(BaseModel):
-    path: str
-
-
-@app.post("/frame-from-path")
-def frame_from_path(req: FrameFromPath):
-    """Load a local image file as the footage frame (CEP panel frame-grab)."""
-    path = Path(req.path).expanduser().resolve()
-    _require(path.is_file(), f"file not found: {path}")
-    try:
-        img = load_image(path)
-    except Exception as e:
-        raise HTTPException(400, f"Could not read image: {e}")
-    S.frame = img.pixels
-    S.match_transforms = None
-    S.correction = None
-    S.warnings["frame"] = img.warnings
-    return {"ok": True, "warnings": img.warnings}
-
-
 class AnalyzeRequest(BaseModel):
     footage_type: str = "rec709"
     auto_correct: bool = True

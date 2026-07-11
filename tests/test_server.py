@@ -133,17 +133,6 @@ class TestCorrectionUX:
 
 
 class TestPanelEndpoints:
-    def test_frame_from_path(self, client, tmp_path):
-        p = tmp_path / "grabbed.png"
-        p.write_bytes(png_bytes((100, 110, 140)))
-        r = client.post("/frame-from-path", json={"path": str(p)})
-        assert r.status_code == 200 and r.json()["ok"] is True
-        assert server.S.frame is not None
-
-    def test_frame_from_missing_path(self, client):
-        r = client.post("/frame-from-path", json={"path": "/tmp/does-not-exist-xyz.png"})
-        assert r.status_code == 400 and "not found" in r.json()["detail"]
-
     def test_export_file_returns_path(self, client, tmp_path):
         upload(client, "reference", (200, 120, 60))
         upload(client, "frame", (100, 110, 140))
