@@ -70,16 +70,16 @@ function lmApplyLut(path) {
       if (!lumetri) return "error: Lumetri added but component not found";
     }
 
-    // The Creative "Look" property accepts a LUT file path as its value.
-    // Property naming varies across versions — try known display names.
-    var names = ["Look", "Creative Look", "Input LUT"];
-    for (var n = 0; n < names.length; n++) {
-      for (var p = 0; p < lumetri.properties.numItems; p++) {
-        var prop = lumetri.properties[p];
-        if (prop.displayName === names[n]) {
-          prop.setValue(path, true);
-          return "ok";
-        }
+    // "Look" is a number — an index into Premiere's built-in preset looks,
+    // NOT a settable path (confirmed live: passing a string there throws
+    // "Illegal Parameter type"). The actual custom-file holder is the
+    // string-typed "LookAsset" property, verified by setting it live and
+    // reading the exact path back unchanged.
+    for (var p = 0; p < lumetri.properties.numItems; p++) {
+      var prop = lumetri.properties[p];
+      if (prop.displayName === "LookAsset") {
+        prop.setValue(path, true);
+        return "ok";
       }
     }
 
@@ -88,7 +88,7 @@ function lmApplyLut(path) {
     for (var q = 0; q < lumetri.properties.numItems && q < 25; q++) {
       propNames.push(lumetri.properties[q].displayName);
     }
-    return "error: no Look property found; Lumetri exposes: " + propNames.join(", ");
+    return "error: no LookAsset property found; Lumetri exposes: " + propNames.join(", ");
   } catch (e) {
     return "error: " + e.toString();
   }

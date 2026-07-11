@@ -241,3 +241,32 @@ auto-start/logging machinery (unrelated, still needed).
 
 Workflow going forward: export a still frame from Premiere yourself (unchanged, always
 worked) and drag it into the panel's Footage frame drop zone.
+
+## Fix — 2026-07-10 (Apply to clip: wrong Lumetri property)
+
+"Apply to clip" errored with `Couldn't auto-apply (error: Error: Illegal Parameter type)`.
+Traced live via CEP's remote-debug protocol (same method as the Grab-frame investigation):
+enumerated every property on the clip's Lumetri Color component (~130 properties) with
+name, live value, and JS type. Found the bug directly: `"Look"` is a **number** (an index
+into Premiere's built-in preset looks), not a settable path — the old code's
+`prop.setValue(path, true)` was handing a string to a property that only accepts an
+integer, hence "Illegal Parameter type". `"Creative Look"` and `"Input LUT"` (the other
+names it tried) don't exist at all on this version's Lumetri.
+
+The correct property is **`LookAsset`** — string-typed, empty by default, clearly the
+custom-file holder for the Creative panel's "Browse…" option. Verified live before
+trusting it: set it directly via evalScript, immediately read back the exact same path
+(no silent truncation/rejection), then ran the *actual* Apply button end-to-end (which
+exports a fresh LUT and calls the real ExtendScript function) and independently confirmed
+the clip's `LookAsset` held that exact freshly-exported path afterward — not stale test
+data. The `Look` enum itself stays at `0` even with a custom asset set; that appears to be
+expected (LookAsset overrides the enum when present), not a sign the field is inert.
+
+Also discovered: editing `host.jsx` does **not** take effect on a panel page reload — CEP's
+ExtendScript host engine loads the script once per Premiere session, independent of the
+Chromium page lifecycle. During development, forced a reload with
+`cs.evalScript('$.evalFile("<path-to-host.jsx>")')` rather than closing/reopening the
+panel each time. Not needed for normal use (a fresh Premiere/panel launch always picks up
+the current file) — noted here only because it cost real time to discover.
+
+Fixed `lmApplyLut()` in `cep/host.jsx` to target `LookAsset` exclusively.
