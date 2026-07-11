@@ -81,11 +81,17 @@ async function ensureServer() {
   }
 
   setStatus("wait", "starting engine…");
+  // Log to a file instead of discarding output: if the spawned process ever
+  // fails to start or crashes, "stdio: ignore" would hide that completely —
+  // this is the only way to see why, since CEP gives no other console access.
+  const logPath = os.tmpdir() + "/lutmatch_engine.log";
+  let child;
   try {
-    const child = cp.spawn(
+    const logFd = fs.openSync(logPath, "a");
+    child = cp.spawn(
       uvicorn,
       ["app.server:app", "--host", "127.0.0.1", "--port", "8765"],
-      { cwd: project, detached: true, stdio: "ignore" }
+      { cwd: project, detached: true, stdio: ["ignore", logFd, logFd] }
     );
     child.unref();
   } catch (e) {
@@ -93,11 +99,24 @@ async function ensureServer() {
     return false;
   }
 
+  let exitedEarly = null;
+  child.on("exit", (code, signal) => { exitedEarly = { code, signal }; });
+
   for (let i = 0; i < 40; i++) {
     await new Promise((r) => setTimeout(r, 500));
     if (await serverUp()) return true;
+    if (exitedEarly) {
+      showOffline(
+        "Engine process exited immediately (code " + exitedEarly.code + "). " +
+          "Log: " + logPath
+      );
+      return false;
+    }
   }
-  showOffline("Engine didn't come up after 20s — try run.command manually.");
+  showOffline(
+    "Engine didn't come up after 20s. Log: " + logPath +
+      " — or try run.command manually."
+  );
   return false;
 }
 
