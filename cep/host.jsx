@@ -70,25 +70,31 @@ function lmApplyLut(path) {
       if (!lumetri) return "error: Lumetri added but component not found";
     }
 
-    // "Look" is a number — an index into Premiere's built-in preset looks,
-    // NOT a settable path (confirmed live: passing a string there throws
-    // "Illegal Parameter type"). The actual custom-file holder is the
-    // string-typed "LookAsset" property, verified by setting it live and
-    // reading the exact path back unchanged.
+    // "Look" is a number — an index into Premiere's built-in preset looks
+    // (0 = none). The actual custom-file path lives in the string-typed
+    // "LookAsset" property. Setting LookAsset alone is not enough: Premiere
+    // only *applies* a custom look when "Look" is also flipped to 1 — this
+    // was reverse-engineered by watching what Premiere itself writes when
+    // browsing a custom LUT through the real Lumetri UI. Both "Look" and
+    // "LookAsset" appear twice under this displayName (nested duplicates);
+    // the first occurrence of each (by property index) is the live one.
+    var lookAssetProp = null, lookProp = null;
     for (var p = 0; p < lumetri.properties.numItems; p++) {
       var prop = lumetri.properties[p];
-      if (prop.displayName === "LookAsset") {
-        prop.setValue(path, true);
-        return "ok";
+      if (!lookAssetProp && prop.displayName === "LookAsset") lookAssetProp = prop;
+      if (!lookProp && prop.displayName === "Look") lookProp = prop;
+      if (lookAssetProp && lookProp) break;
+    }
+    if (!lookAssetProp || !lookProp) {
+      var propNames = [];
+      for (var q = 0; q < lumetri.properties.numItems && q < 25; q++) {
+        propNames.push(lumetri.properties[q].displayName);
       }
+      return "error: Look/LookAsset property not found; Lumetri exposes: " + propNames.join(", ");
     }
-
-    // Nothing matched: report what IS there so failures are diagnosable.
-    var propNames = [];
-    for (var q = 0; q < lumetri.properties.numItems && q < 25; q++) {
-      propNames.push(lumetri.properties[q].displayName);
-    }
-    return "error: no LookAsset property found; Lumetri exposes: " + propNames.join(", ");
+    lookAssetProp.setValue(path, true);
+    lookProp.setValue(1, true);
+    return "ok";
   } catch (e) {
     return "error: " + e.toString();
   }

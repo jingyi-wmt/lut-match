@@ -270,3 +270,17 @@ panel each time. Not needed for normal use (a fresh Premiere/panel launch always
 the current file) — noted here only because it cost real time to discover.
 
 Fixed `lmApplyLut()` in `cep/host.jsx` to target `LookAsset` exclusively.
+
+## Fix — 2026-07-10 (Apply to clip: LookAsset alone doesn't activate the look)
+
+Follow-up to the LookAsset fix above: setting `LookAsset` alone added an inert Lumetri
+Color effect — no visible look, because the numeric `"Look"` enum stayed at `0` ("none").
+Root cause found by having JZ apply a custom LUT through Premiere's real Lumetri UI
+(Creative → Look → Browse) and reading the clip's properties immediately after: Premiere
+itself writes `Look=1` alongside `LookAsset=<path>`. `lmApplyLut()` now sets both
+(`LookAsset` to the path, `Look` to `1`) using the *first* occurrence of each displayName
+— both names appear twice among Lumetri's ~130 properties, and only the first is live.
+
+Also confirmed during this fix: editing `host.jsx` needs either a fresh Premiere/panel
+launch or a forced `$.evalFile()` reload to take effect — a plain panel-page reload does
+not touch the ExtendScript engine (documented in the prior fix's log above).
