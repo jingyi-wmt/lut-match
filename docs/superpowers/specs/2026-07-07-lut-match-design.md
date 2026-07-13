@@ -171,3 +171,217 @@ document-flow layout there.
 Verified live at 600×1000 (the reported bug width): no overlap, no horizontal scroll,
 correct top-to-bottom stacking of Reference → Frame → Match → Preview → Fine-tune.
 Re-confirmed the round-5 desktop cockpit behavior (1440×820) is unaffected.
+
+## Revisions — 2026-07-08 (feature-extension branch: Premiere CEP panel)
+
+Native in-app experience for Premiere Pro 2026 via a CEP panel (architecture chosen after
+verifying on-disk: PP 26.0.0 ships CEPHtmlEngine 12.0.1.2; CSXS.12 PlayerDebugMode already 1).
+
+- `cep/` — panel bundle: manifest (PPRO [14.0,99.9], Node enabled), shell `index.html`
+  (toolbar: status dot · Grab frame · Apply to clip · Stop engine) + iframe of
+  `http://127.0.0.1:8765/?panel=1`; `main.js` auto-starts `.venv/bin/uvicorn` using the
+  project path from `config.json` (written by `cep/install.sh`); `host.jsx` ExtendScript
+  (`lmPing` fail-fast probe, `lmGrabFrame` via `exportFramePNG`, `lmApplyLut` via
+  clip.components + QE-DOM effect add, matching QE items by start ticks to skip gaps,
+  with diagnostic property-name dump on failure).
+- Server: `POST /frame-from-path` (panel grab), `GET /export-file` → `{path}` (shared
+  `_bake_to_disk` with `/export`), permissive CORS (loopback-only server; shell runs from file://).
+- UI: `?panel=1` hides header/padding; postMessage protocol — `frame-updated` (refresh frame
+  thumb) and `get-settings`/`settings` (shell learns strength + ready before exporting).
+- CSS: explicit `height:100vh` fallback before `100dvh` (CEP 12 ≈ Chromium 99, no dvh).
+- Verified: 67 tests pass; browser regression (normal + panel modes, both postMessage flows)
+  green. In-Premiere steps (panel loads, lmPing, grab, apply) are JZ's to run — apply-to-clip
+  is fallback-first by design.
+
+## Bugfix — 2026-07-08 (panel stuck on "checking engine…")
+
+JZ reported the panel stuck at a yellow status dot on first real launch. Root cause
+confirmed (not guessed): the bundled CEF is Chromium **99.2.15.0** (verified via
+`strings` on `Chromium Embedded Framework.framework`), and `AbortSignal.timeout()`
+wasn't added until Chrome 103. Calling it in `serverUp()` threw synchronously, before
+the `fetch().then().catch()` chain existed to catch it — an unhandled rejection that
+silently wedged `init()` at its very first status check, forever.
+
+Fixed: `fetchWithTimeout()` (manual `AbortController` + `setTimeout`) replaces
+`AbortSignal.timeout()`. Also wrapped `init()` in try/catch so any *other* future
+surprise (missing API, unexpected exception) shows a real message in the toolbar
+instead of leaving the dot stuck with no explanation. Re-installed to
+`~/Library/.../CEP/extensions/LUTMatch`.
+
+## Removal — 2026-07-10 (Grab frame retired: dead private API)
+
+"Grab frame" reported "does nothing" on click. Traced live via Premiere's CEP remote-debug
+port (Chrome DevTools Protocol against `localhost:8098`) rather than guessed:
+- Root cause of "does nothing" (no error shown): the engine simply wasn't running at the
+  time — the button is `disabled` by default and only enables once `/status` responds, so
+  a dead engine produces a silent no-op click. Not a code bug on its own.
+- Once the engine was up, the real error surfaced: `seq.exportFramePNG is not a function`.
+  `exportFramePNG` doesn't exist on the standard DOM `Sequence` — but reflection via
+  ExtendScript (`for...in` + `typeof` probing) found it *does* exist as a function on the
+  QE (private/testing) sequence object, `qe.project.getActiveSequence()`.
+- Exhaustively tested against the QE object live: 7+ signature variants (string/number
+  ticks, path-only, swapped argument order, a `Time` object, numbered-sequence filenames),
+  each isolated in its own try/catch. The correct-looking call —
+  `qeSeq.exportFramePNG(ticksString, path)` — returns `true` with no thrown error, but
+  **never writes a file**, even after a 25-second wait. Confirmed independently that both
+  Node's `fs` (panel context) and ExtendScript's `File` object (Premiere's own process)
+  can write to the same directory without issue — so this isn't a permissions problem.
+  Conclusion: `exportFramePNG` is dead/vestigial in Premiere 26.0.0's QE layer.
+- The documented alternative, `app.encoder.encodeSequence()`, does exist and works via
+  Adobe Media Encoder — but AME is installed with no PNG-format preset available anywhere
+  on disk (only video codec `.epr` files from other plugins), meaning a preset would need
+  to be hand-authored against an unfamiliar XML schema, plus AME adds async job-queue
+  handling and a much heavier per-grab cost. JZ chose not to pursue this for now.
+
+**Removed**: the Grab frame button (`cep/index.html`), `grabFrame()`/its wiring
+(`cep/main.js`), `lmGrabFrame()` (`cep/host.jsx`), and the `/frame-from-path` endpoint
++ its tests (`app/server.py`, `tests/test_server.py`) that only existed to receive it.
+**Kept**: Apply to clip (works, verified independently), and the engine
+auto-start/logging machinery (unrelated, still needed).
+
+Workflow going forward: export a still frame from Premiere yourself (unchanged, always
+worked) and drag it into the panel's Footage frame drop zone.
+
+## Fix — 2026-07-10 (Apply to clip: wrong Lumetri property)
+
+"Apply to clip" errored with `Couldn't auto-apply (error: Error: Illegal Parameter type)`.
+Traced live via CEP's remote-debug protocol (same method as the Grab-frame investigation):
+enumerated every property on the clip's Lumetri Color component (~130 properties) with
+name, live value, and JS type. Found the bug directly: `"Look"` is a **number** (an index
+into Premiere's built-in preset looks), not a settable path — the old code's
+`prop.setValue(path, true)` was handing a string to a property that only accepts an
+integer, hence "Illegal Parameter type". `"Creative Look"` and `"Input LUT"` (the other
+names it tried) don't exist at all on this version's Lumetri.
+
+The correct property is **`LookAsset`** — string-typed, empty by default, clearly the
+custom-file holder for the Creative panel's "Browse…" option. Verified live before
+trusting it: set it directly via evalScript, immediately read back the exact same path
+(no silent truncation/rejection), then ran the *actual* Apply button end-to-end (which
+exports a fresh LUT and calls the real ExtendScript function) and independently confirmed
+the clip's `LookAsset` held that exact freshly-exported path afterward — not stale test
+data. The `Look` enum itself stays at `0` even with a custom asset set; that appears to be
+expected (LookAsset overrides the enum when present), not a sign the field is inert.
+
+Also discovered: editing `host.jsx` does **not** take effect on a panel page reload — CEP's
+ExtendScript host engine loads the script once per Premiere session, independent of the
+Chromium page lifecycle. During development, forced a reload with
+`cs.evalScript('$.evalFile("<path-to-host.jsx>")')` rather than closing/reopening the
+panel each time. Not needed for normal use (a fresh Premiere/panel launch always picks up
+the current file) — noted here only because it cost real time to discover.
+
+Fixed `lmApplyLut()` in `cep/host.jsx` to target `LookAsset` exclusively.
+
+## Fix — 2026-07-10 (Apply to clip: LookAsset alone doesn't activate the look)
+
+Follow-up to the LookAsset fix above: setting `LookAsset` alone added an inert Lumetri
+Color effect — no visible look, because the numeric `"Look"` enum stayed at `0` ("none").
+Root cause found by having JZ apply a custom LUT through Premiere's real Lumetri UI
+(Creative → Look → Browse) and reading the clip's properties immediately after: Premiere
+itself writes `Look=1` alongside `LookAsset=<path>`. `lmApplyLut()` now sets both
+(`LookAsset` to the path, `Look` to `1`) using the *first* occurrence of each displayName
+— both names appear twice among Lumetri's ~130 properties, and only the first is live.
+
+Also confirmed during this fix: editing `host.jsx` needs either a fresh Premiere/panel
+launch or a forced `$.evalFile()` reload to take effect — a plain panel-page reload does
+not touch the ExtendScript engine (documented in the prior fix's log above).
+
+## Removal + fix — 2026-07-13 (Apply to clip retired; Export .cube fixed in panel mode)
+
+**Apply to clip removed.** Even with the correct properties (`LookAsset` + `Look` enum,
+see the fix above), the applied look still didn't render visibly in Lumetri — the
+underlying mechanism clearly isn't fully understood/reliable on this Premiere version.
+JZ decided to drop it and apply LUTs manually instead (always worked). Removed
+end-to-end: the button (`cep/index.html`), `applyLut()`/`getIframeSettings()`
+(`cep/main.js`), and `lmApplyLut()`/`lmFindSelectedClip()`/`lmFindComponent()`/
+`lmAddLumetri()` (`cep/host.jsx`).
+
+Since both native ExtendScript integrations (grab-frame, apply-to-clip) are now gone,
+the entire ExtendScript bridge is unused — deleted `cep/host.jsx` and `cep/CSInterface.js`
+outright, dropped `<ScriptPath>` from the manifest, and simplified `cep/main.js` down to
+just: ensure the engine is running, embed the iframe, Quit. `readConfig()` now resolves
+`config.json` from the page's own directory (`new URL(".", document.location.href)`)
+instead of `CSInterface.getSystemPath()`.
+
+**Export .cube was "not working" in panel mode** — traced live (same CDP method as
+before): the request genuinely succeeds server-side (200 OK, file written to `output/`),
+but clicking the button does `window.location = /export?...`, which triggers a
+browser-style file-download navigation. CEP's embedded panel iframe has no download
+manager to catch that, so Chromium aborts it (`net::ERR_ABORTED`) with no visible error —
+the file was on disk the whole time, just invisibly. Fixed: in panel mode (`?panel=1`),
+Export now calls the existing `/export-file` endpoint (returns `{path}` as JSON) and
+displays the saved path directly next to the button instead of attempting a download.
+Standalone browser use (outside the panel) is unchanged — a real download still works
+there.
+
+**Also discovered and fixed a caching trap that would have silently hidden this and any
+future fix**: CEP's embedded iframe (a real HTTP `127.0.0.1:8765` origin, unlike the
+`file://` panel shell) caches the app's HTML in Chromium's normal HTTP cache. Neither a
+panel-page reload nor even calling `Page.reload({ignoreCache:true})` directly on the
+iframe's own CDP target actually bypassed it during testing — only a cache-busting URL
+(`?_cb=<timestamp>`) forced a genuinely fresh load. Since a CEP panel has no manual
+refresh control for the end user, this would have meant every future update to the app
+silently failed to appear until Premiere was fully restarted. Fixed at the source:
+`GET /` now sends `Cache-Control: no-store`.
+
+## Feature — 2026-07-13 (choose Export .cube save location)
+
+JZ wanted to pick where the exported LUT is saved, instead of it always landing in
+`output/`. Implemented per-context since the mechanism differs:
+
+- **Standalone browser**: uses the File System Access API (`showSaveFilePicker`) where
+  supported (Chrome/Edge) — fetches the .cube as a blob, lets the user pick a location,
+  writes it there directly. Falls back to a plain download (Safari, older browsers).
+  Verified live in a real browser: mocked `showSaveFilePicker`, clicked the real Export
+  button, confirmed the correct suggested filename, a 970KB blob (a genuine 33³ LUT, not
+  a stub), and the writable stream closed cleanly.
+- **CEP panel**: the embedded iframe is just a web page with no OS dialog access, so the
+  panel *shell* (`cep/main.js`, which has Node integration) now owns the whole save flow.
+  The app posts `{type: "request-save", strength}` to its parent; the shell fetches the
+  bytes itself, parses the suggested filename off `Content-Disposition`, shows a native
+  save dialog via `osascript -e 'choose file name ...'` (defaulting to the project's
+  `output/` folder), writes the bytes to wherever the user picked via `fs.writeFileSync`,
+  and replies `{type: "save-result", ok, path}` (or `{cancelled: true}` if the dialog was
+  dismissed). Verified live against the running panel: `execFileSync`+`osascript` and
+  `Buffer`+`fs.writeFileSync` both proven to work in the shell's Node context, then the
+  full message round-trip end-to-end (real fetch, real 970KB LUT, real file written) with
+  `execFileSync` temporarily stubbed to avoid popping an actual interactive dialog during
+  automated testing — that one piece needs a human to click through, and is JZ's to
+  confirm.
+
+Found and fixed a supporting CORS gap along the way: `Content-Disposition` isn't in the
+CORS-safelisted response header list, so the panel shell's cross-origin fetch (`file://`
+→ `http://127.0.0.1:8765`) couldn't read the suggested filename until
+`expose_headers=["Content-Disposition"]` was added to the CORS middleware.
+
+`/export-file` (the JSON-path endpoint added for the old panel-mode export and
+apply-to-clip) is now dead — nothing calls it anymore. Removed, along with its test.
+
+## Fix — 2026-07-14 (persistent CEP disk cache; also: testing hygiene note)
+
+Two issues surfaced from JZ's report that Export .cube "wasn't responding" / showed a
+stale fake path:
+
+1. **My own testing mistake**: during verification the previous day, `cp.execFileSync`
+   was temporarily monkey-patched to a fake stub in the live panel session, and repeated
+   test iterations kept saving an already-stubbed reference as "original" rather than the
+   true native function — so it never got properly restored. Confirmed live: even a fresh
+   `require("child_process")` call returned the same contaminated module. Root cause:
+   CEP's Node integration keeps a persistent module registry that survives page reloads
+   (the Node layer isn't part of the Chromium page state a reload resets) — only fully
+   closing and reopening the panel (tearing down its CEPHtmlEngine renderer process)
+   clears it. JZ did this and it resolved correctly. Lesson: never mutate shared
+   objects (Node built-ins, globals) live in a real user session without a guaranteed,
+   verified-immediately restore — safer to test via a temporary local variable/shadowing
+   where possible, or accept the "ask the user to reopen the panel" cost up front.
+
+2. **Real, permanent bug**: separately, the iframe was still serving a stale HTML snapshot
+   (missing recent UI elements) even after a *genuine* panel restart (new process IDs).
+   Root cause: CEP's Chromium keeps its HTTP cache in a persistent on-disk profile
+   (`~/Library/Application Support/CEF/User Data`) that is **not** cleared by restarting
+   the panel or Premiere — a response cached before `Cache-Control: no-store` was added
+   can keep being served indefinitely regardless of that header, since the header only
+   governs *future* caching decisions, not existing entries. Fixed at the source: the
+   shell now loads the iframe with a unique `&_v=<timestamp>` query string on every panel
+   launch (`showApp()` in `cep/main.js`), so there is never a URL to have a stale cache
+   entry for in the first place. Verified: reloading the shell produces a new `_v=`
+   each time and the resulting iframe content is always current.

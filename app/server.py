@@ -5,10 +5,12 @@ from __future__ import annotations
 import io as _io
 import os
 import signal
+import threading
 from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from PIL import Image
 from pydantic import BaseModel
@@ -26,6 +28,20 @@ OUTPUT_DIR = ROOT / "output"
 PREVIEW_MAX = 960
 
 app = FastAPI(title="LUT Match")
+
+# The CEP panel shell runs from file:// (origin "null") and fetches this API.
+# The server binds to 127.0.0.1 only, so permissive CORS exposes nothing
+# beyond this machine.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    # Content-Disposition isn't CORS-safelisted by default, so a cross-origin
+    # fetch (the panel shell, from file://) can't read the suggested filename
+    # off the response unless it's explicitly exposed here.
+    expose_headers=["Content-Disposition"],
+)
 
 
 class Session:
@@ -94,7 +110,13 @@ def _grade(pixels_display: np.ndarray, strength: float) -> np.ndarray:
 
 @app.get("/")
 def index():
-    return FileResponse(ROOT / "app" / "static" / "index.html")
+    # No caching: this is embedded in a long-lived CEP panel session inside
+    # Premiere, which has no manual refresh control. A cached copy would
+    # silently hide every future update to the app until Premiere restarts.
+    return FileResponse(
+        ROOT / "app" / "static" / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/upload/{kind}")
@@ -191,8 +213,7 @@ def preview(strength: float = 1.0):
     return Response(_to_jpeg(graded), media_type="image/jpeg")
 
 
-@app.get("/export")
-def export(strength: float = 1.0, size: int = 33):
+def _bake_to_disk(strength: float, size: int) -> Path:
     _require(S.frame is not None, "no frame")
     _require(size in (17, 33, 65), "size must be 17, 33 or 65")
     footage_type = S.footage_type
@@ -203,8 +224,13 @@ def export(strength: float = 1.0, size: int = 33):
     table = bake_lut(pipeline, size=size)
     OUTPUT_DIR.mkdir(exist_ok=True)
     name = f"{S.reference_name}-match.cube"
-    path = write_cube(table, OUTPUT_DIR / name, title=f"LUT Match — {S.reference_name}")
-    return FileResponse(path, filename=name, media_type="application/octet-stream")
+    return write_cube(table, OUTPUT_DIR / name, title=f"LUT Match — {S.reference_name}")
+
+
+@app.get("/export")
+def export(strength: float = 1.0, size: int = 33):
+    path = _bake_to_disk(strength, size)
+    return FileResponse(path, filename=path.name, media_type="application/octet-stream")
 
 
 @app.get("/status")
@@ -230,7 +256,5 @@ def status():
 @app.post("/shutdown")
 def shutdown():
     """Quit button: stop the server after this response is sent."""
-    import threading
-
     threading.Timer(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
     return {"ok": True}

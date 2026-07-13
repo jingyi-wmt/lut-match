@@ -13,7 +13,12 @@
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.5 -apple-system, "SF Pro Text", Helvetica, sans-serif;
-         display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+         display: flex; flex-direction: column;
+         height: 100vh;   /* fallback: CEP 12's Chromium (~99) has no dvh */
+         height: 100dvh; overflow: hidden; }
+  /* Inside the Premiere panel (?panel=1): the panel shell provides chrome. */
+  body.panel-mode header { display: none; }
+  body.panel-mode main { padding: 10px 12px; }
   header { padding: 14px 22px; display: flex; align-items: baseline; gap: 12px;
            border-bottom: 1px solid #2c303a; flex: 0 0 auto; }
   header h1 { font-size: 17px; margin: 0; letter-spacing: .3px; }
@@ -174,6 +179,7 @@
       </label>
       <div class="mode-row">
         <button class="primary" id="export" disabled>⬇ Export .cube</button>
+        <span id="export-msg" style="color:var(--dim);font-size:12px"></span>
         <div class="looks" id="looks">
           <span class="hint" id="looks-hint">Like this look? Save it, tweak on, then click a chip to flip back:</span>
           <span class="chip" id="chip-A"></span>
@@ -309,9 +315,9 @@ $("correction-strength").onchange = () => {
 // --- fine-tune sliders ---
 const TWEAKS = { temperature: 0, tint: 0, contrast: 1, saturation: 1, shadows: 0, highlights: 0 };
 
-function resetTweakSliders(push = true) {
+function resetTweakSliders() {
   for (const [k, dflt] of Object.entries(TWEAKS)) setSlider(k, dflt);
-  if (push) pushTweaks();
+  pushTweaks();
 }
 
 function setSlider(id, value) {
@@ -487,13 +493,88 @@ function markDiverged() {
 renderLooks();
 
 // --- export & quit ---
-$("export").onclick = () => {
-  window.location = `/export?strength=${$("strength").value}`;
+const isPanel = new URLSearchParams(location.search).get("panel") === "1";
+
+function parseSuggestedName(contentDisposition) {
+  const star = /filename\*=utf-8''([^;]+)/i.exec(contentDisposition || "");
+  if (star) return decodeURIComponent(star[1]);
+  const plain = /filename="?([^";]+)"?/i.exec(contentDisposition || "");
+  return plain ? plain[1] : "look.cube";
+}
+
+// Ask the panel shell to show a native macOS save dialog (this page has no
+// such thing available itself) and write the file wherever the user picks.
+function requestSaveFromShell(strength) {
+  return new Promise((resolve) => {
+    const onMsg = (e) => {
+      if (e.data && e.data.type === "save-result") {
+        window.removeEventListener("message", onMsg);
+        resolve(e.data);
+      }
+    };
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({ type: "request-save", strength }, "*");
+    setTimeout(() => {
+      window.removeEventListener("message", onMsg);
+      resolve({ ok: false, error: "No response from the panel shell (timed out)." });
+    }, 30000);
+  });
+}
+
+$("export").onclick = async () => {
+  const strength = +$("strength").value;
+
+  if (isPanel) {
+    $("export-msg").textContent = "Choose where to save…";
+    const result = await requestSaveFromShell(strength);
+    if (result.ok) {
+      $("export-msg").textContent = "Saved: " + result.path;
+    } else if (result.cancelled) {
+      $("export-msg").textContent = "";
+    } else {
+      $("export-msg").textContent = "";
+      setError("Export failed: " + (result.error || "unknown error"));
+    }
+    return;
+  }
+
+  // Standalone browser use: let the user pick a save location directly
+  // where supported (Chrome/Edge), falling back to a normal download
+  // (Safari and older browsers) which saves to the Downloads folder.
+  if (window.showSaveFilePicker) {
+    try {
+      const resp = await fetch(`/export?strength=${strength}`);
+      if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+      const suggestedName = parseSuggestedName(resp.headers.get("content-disposition"));
+      const blob = await resp.blob();
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: "LUT file", accept: { "application/octet-stream": [".cube"] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      $("export-msg").textContent = "Saved: " + (handle.name || suggestedName);
+    } catch (e) {
+      if (e.name === "AbortError") return; // user cancelled the picker
+      setError("Export failed: " + e.message);
+    }
+    return;
+  }
+
+  window.location = `/export?strength=${strength}`;
 };
 $("quit").onclick = async () => {
   try { await api("/shutdown", { method: "POST" }); } catch {}
   document.body.innerHTML = '<p style="padding:40px;color:#8a90a0">LUT Match closed. You can close this tab.</p>';
 };
+
+// --- Premiere panel integration ---
+// Inside the CEP panel the app is embedded as ?panel=1: the panel shell owns
+// the chrome (status dot, Retry, Quit); this page is just the app itself.
+if (isPanel) {
+  document.body.classList.add("panel-mode");
+}
 
 // --- init ---
 (async () => {

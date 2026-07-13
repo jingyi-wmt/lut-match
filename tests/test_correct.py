@@ -2,7 +2,7 @@ import numpy as np
 
 from app.engine.correct import apply_correction, compute_correction
 from app.engine.recipe import GradingRecipe
-from app.engine.render import apply_recipe
+from app.engine.render import apply_recipe, soft_clip
 
 _LUMA = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 rng = np.random.default_rng(9)
@@ -137,19 +137,16 @@ class TestSkinProtection:
 
 class TestSoftClip:
     def test_identity_in_safe_range(self):
-        from app.engine.render import soft_clip
         img = rng.uniform(0.05, 0.95, (1000, 3)).astype(np.float32)
         np.testing.assert_allclose(soft_clip(img), img, atol=1e-6)
 
     def test_monotonic_and_bounded(self):
-        from app.engine.render import soft_clip
         ramp = np.linspace(-0.5, 1.5, 500, dtype=np.float32).reshape(-1, 1).repeat(3, axis=1)
         out = soft_clip(ramp)
         assert out.min() >= 0.0 and out.max() <= 1.0
         assert np.all(np.diff(out[:, 0]) >= -1e-7)
 
     def test_overshoot_keeps_gradation(self):
-        from app.engine.render import soft_clip
         a = soft_clip(np.array([[1.0, 1.0, 1.0]], dtype=np.float32))
         b = soft_clip(np.array([[1.05, 1.05, 1.05]], dtype=np.float32))
         assert float(b[0, 0]) > float(a[0, 0])  # not flattened to the same value

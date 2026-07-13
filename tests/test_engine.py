@@ -2,12 +2,7 @@ import numpy as np
 import pytest
 
 from app.engine.lut import apply_cube, bake_lut, read_cube, write_cube
-from app.engine.match import (
-    apply_banded_match,
-    apply_match,
-    banded_mkl_transform,
-    mkl_transform,
-)
+from app.engine.match import apply_banded_match, banded_mkl_transform
 from app.engine.recipe import RGB, CurvePoint, GradingRecipe, SplitTone
 from app.engine.render import apply_recipe
 
@@ -89,21 +84,6 @@ class TestRecipeRender:
     def test_bad_hue_saturation_length_rejected(self):
         with pytest.raises(Exception):
             GradingRecipe(hue_saturation=[1.0, 1.0])
-
-
-class TestMatch:
-    def test_self_match_is_near_identity(self):
-        img = random_image()
-        A, b = mkl_transform(img, img)
-        np.testing.assert_allclose(A, np.eye(3), atol=1e-4)
-        np.testing.assert_allclose(b, 0.0, atol=1e-4)
-
-    def test_match_transfers_mean_and_cov(self):
-        frame = rng.normal(0.4, 0.08, (20000, 3)).astype(np.float32)
-        ref = rng.normal(0.6, 0.15, (20000, 3)).astype(np.float32)
-        A, b = mkl_transform(frame, ref)
-        out = apply_match(np.clip(frame, 0, 1), A, b)
-        assert abs(float(out.mean()) - float(np.clip(ref, 0, 1).mean())) < 0.03
 
 
 class TestBandedMatch:

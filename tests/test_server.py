@@ -132,6 +132,22 @@ class TestCorrectionUX:
         assert server.S.correction is None
 
 
+class TestPanelEndpoints:
+    def test_cors_headers_present(self, client):
+        r = client.get("/status", headers={"Origin": "null"})
+        assert r.headers.get("access-control-allow-origin") == "*"
+
+    def test_content_disposition_exposed_for_cross_origin_fetch(self, client):
+        # The CEP panel shell (file:// origin) needs to read this header off
+        # a cross-origin fetch to /export to pick a suggested filename; by
+        # default Content-Disposition isn't CORS-exposed to script.
+        upload(client, "reference", (200, 120, 60))
+        upload(client, "frame", (100, 110, 140))
+        analyze(client, auto_correct=False)
+        r = client.get("/export", headers={"Origin": "null"})
+        assert "content-disposition" in r.headers.get("access-control-expose-headers", "").lower()
+
+
 class TestOptionsAndTweaks:
     def test_keep_luma_changes_preview(self, client):
         upload(client, "reference", (230, 160, 60))

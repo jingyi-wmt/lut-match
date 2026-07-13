@@ -9,7 +9,6 @@ import numpy as np
 from PIL import Image
 
 ACCEPTED_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
-MAX_ANALYSIS_DIM = 1024
 
 
 @dataclass
@@ -54,13 +53,3 @@ def _add_warnings(img: LoadedImage) -> None:
     clipped = float(((luma < 0.004) | (luma > 0.996)).mean())
     if clipped > 0.05:
         img.warnings.append(f"{clipped:.0%} of pixels are clipped; matched blacks/whites may be off.")
-
-
-def downsample_for_analysis(pixels: np.ndarray, max_dim: int = MAX_ANALYSIS_DIM) -> np.ndarray:
-    h, w = pixels.shape[:2]
-    scale = max(h, w) / max_dim
-    if scale <= 1.0:
-        return pixels
-    pil = Image.fromarray((np.clip(pixels, 0, 1) * 255).astype(np.uint8))
-    pil = pil.resize((round(w / scale), round(h / scale)), Image.LANCZOS)
-    return np.asarray(pil, dtype=np.float32) / 255.0

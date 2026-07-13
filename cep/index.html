@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LUT Match</title>
+<style>
+  :root { --bg:#16181d; --panel:#1f2229; --text:#e8eaf0; --dim:#8a90a0;
+          --accent:#e8734a; --ok:#6fd08c; --err:#e86a6a; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); display: flex; flex-direction: column;
+         font: 12px/1.4 -apple-system, "SF Pro Text", Helvetica, sans-serif; overflow: hidden; }
+
+  #toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+             padding: 6px 10px; background: var(--panel); border-bottom: 1px solid #2c303a; }
+  #status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); flex: 0 0 auto; }
+  #status-dot.ok { background: var(--ok); }
+  #status-dot.wait { background: #e8b84a; }
+  #status-text { color: var(--dim); margin-right: 6px; white-space: nowrap; flex: 1; }
+  button { background: #262a33; color: var(--text); border: 1px solid #3a4050;
+           border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 12px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  #quit-server { margin-left: auto; color: var(--dim); font-size: 11px; padding: 4px 9px; }
+
+  #frame { flex: 1 1 auto; border: none; width: 100%; background: var(--bg); }
+  #offline { flex: 1; display: none; align-items: center; justify-content: center;
+             flex-direction: column; gap: 10px; color: var(--dim); text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+  <div id="toolbar">
+    <span id="status-dot"></span>
+    <span id="status-text">starting…</span>
+    <button id="quit-server" title="Stop the LUT Match engine">✕ Stop engine</button>
+  </div>
+  <iframe id="frame" style="display:none"></iframe>
+  <div id="offline">
+    <div id="offline-text">Starting the LUT Match engine…</div>
+    <button id="retry">Retry</button>
+  </div>
+  <script src="./main.js"></script>
+</body>
+</html>
