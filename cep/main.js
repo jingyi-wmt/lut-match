@@ -140,7 +140,12 @@ function showApp() {
   setStatus("ok", "engine running");
   $("offline").style.display = "none";
   const frame = $("frame");
-  frame.src = BASE + "/?panel=1";
+  // CEP's HTTP cache lives in a persistent on-disk profile that survives
+  // across panel/Premiere restarts — Cache-Control: no-store only prevents
+  // *new* caching, it doesn't invalidate anything already stored under this
+  // exact URL from before that header existed. A unique query string every
+  // launch guarantees there's nothing to ever reuse.
+  frame.src = BASE + "/?panel=1&_v=" + Date.now();
   frame.style.display = "";
 }
 

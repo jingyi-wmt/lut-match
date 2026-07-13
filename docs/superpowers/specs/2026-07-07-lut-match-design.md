@@ -355,3 +355,33 @@ CORS-safelisted response header list, so the panel shell's cross-origin fetch (`
 
 `/export-file` (the JSON-path endpoint added for the old panel-mode export and
 apply-to-clip) is now dead — nothing calls it anymore. Removed, along with its test.
+
+## Fix — 2026-07-14 (persistent CEP disk cache; also: testing hygiene note)
+
+Two issues surfaced from JZ's report that Export .cube "wasn't responding" / showed a
+stale fake path:
+
+1. **My own testing mistake**: during verification the previous day, `cp.execFileSync`
+   was temporarily monkey-patched to a fake stub in the live panel session, and repeated
+   test iterations kept saving an already-stubbed reference as "original" rather than the
+   true native function — so it never got properly restored. Confirmed live: even a fresh
+   `require("child_process")` call returned the same contaminated module. Root cause:
+   CEP's Node integration keeps a persistent module registry that survives page reloads
+   (the Node layer isn't part of the Chromium page state a reload resets) — only fully
+   closing and reopening the panel (tearing down its CEPHtmlEngine renderer process)
+   clears it. JZ did this and it resolved correctly. Lesson: never mutate shared
+   objects (Node built-ins, globals) live in a real user session without a guaranteed,
+   verified-immediately restore — safer to test via a temporary local variable/shadowing
+   where possible, or accept the "ask the user to reopen the panel" cost up front.
+
+2. **Real, permanent bug**: separately, the iframe was still serving a stale HTML snapshot
+   (missing recent UI elements) even after a *genuine* panel restart (new process IDs).
+   Root cause: CEP's Chromium keeps its HTTP cache in a persistent on-disk profile
+   (`~/Library/Application Support/CEF/User Data`) that is **not** cleared by restarting
+   the panel or Premiere — a response cached before `Cache-Control: no-store` was added
+   can keep being served indefinitely regardless of that header, since the header only
+   governs *future* caching decisions, not existing entries. Fixed at the source: the
+   shell now loads the iframe with a unique `&_v=<timestamp>` query string on every panel
+   launch (`showApp()` in `cep/main.js`), so there is never a URL to have a stale cache
+   entry for in the first place. Verified: reloading the shell produces a new `_v=`
+   each time and the resulting iframe content is always current.
