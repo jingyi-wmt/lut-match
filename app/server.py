@@ -103,7 +103,13 @@ def _grade(pixels_display: np.ndarray, strength: float) -> np.ndarray:
 
 @app.get("/")
 def index():
-    return FileResponse(ROOT / "app" / "static" / "index.html")
+    # No caching: this is embedded in a long-lived CEP panel session inside
+    # Premiere, which has no manual refresh control. A cached copy would
+    # silently hide every future update to the app until Premiere restarts.
+    return FileResponse(
+        ROOT / "app" / "static" / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/upload/{kind}")

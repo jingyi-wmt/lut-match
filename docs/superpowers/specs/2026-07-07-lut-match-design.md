@@ -284,3 +284,41 @@ itself writes `Look=1` alongside `LookAsset=<path>`. `lmApplyLut()` now sets bot
 Also confirmed during this fix: editing `host.jsx` needs either a fresh Premiere/panel
 launch or a forced `$.evalFile()` reload to take effect — a plain panel-page reload does
 not touch the ExtendScript engine (documented in the prior fix's log above).
+
+## Removal + fix — 2026-07-13 (Apply to clip retired; Export .cube fixed in panel mode)
+
+**Apply to clip removed.** Even with the correct properties (`LookAsset` + `Look` enum,
+see the fix above), the applied look still didn't render visibly in Lumetri — the
+underlying mechanism clearly isn't fully understood/reliable on this Premiere version.
+JZ decided to drop it and apply LUTs manually instead (always worked). Removed
+end-to-end: the button (`cep/index.html`), `applyLut()`/`getIframeSettings()`
+(`cep/main.js`), and `lmApplyLut()`/`lmFindSelectedClip()`/`lmFindComponent()`/
+`lmAddLumetri()` (`cep/host.jsx`).
+
+Since both native ExtendScript integrations (grab-frame, apply-to-clip) are now gone,
+the entire ExtendScript bridge is unused — deleted `cep/host.jsx` and `cep/CSInterface.js`
+outright, dropped `<ScriptPath>` from the manifest, and simplified `cep/main.js` down to
+just: ensure the engine is running, embed the iframe, Quit. `readConfig()` now resolves
+`config.json` from the page's own directory (`new URL(".", document.location.href)`)
+instead of `CSInterface.getSystemPath()`.
+
+**Export .cube was "not working" in panel mode** — traced live (same CDP method as
+before): the request genuinely succeeds server-side (200 OK, file written to `output/`),
+but clicking the button does `window.location = /export?...`, which triggers a
+browser-style file-download navigation. CEP's embedded panel iframe has no download
+manager to catch that, so Chromium aborts it (`net::ERR_ABORTED`) with no visible error —
+the file was on disk the whole time, just invisibly. Fixed: in panel mode (`?panel=1`),
+Export now calls the existing `/export-file` endpoint (returns `{path}` as JSON) and
+displays the saved path directly next to the button instead of attempting a download.
+Standalone browser use (outside the panel) is unchanged — a real download still works
+there.
+
+**Also discovered and fixed a caching trap that would have silently hidden this and any
+future fix**: CEP's embedded iframe (a real HTTP `127.0.0.1:8765` origin, unlike the
+`file://` panel shell) caches the app's HTML in Chromium's normal HTTP cache. Neither a
+panel-page reload nor even calling `Page.reload({ignoreCache:true})` directly on the
+iframe's own CDP target actually bypassed it during testing — only a cache-busting URL
+(`?_cb=<timestamp>`) forced a genuinely fresh load. Since a CEP panel has no manual
+refresh control for the end user, this would have meant every future update to the app
+silently failed to appear until Premiere was fully restarted. Fixed at the source:
+`GET /` now sends `Cache-Control: no-store`.

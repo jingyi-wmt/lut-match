@@ -3,22 +3,23 @@
  * Responsibilities:
  *  - ensure the Python engine is running (spawn PROJECT/.venv/bin/uvicorn if not)
  *  - embed the web UI (http://127.0.0.1:8765/?panel=1) in the iframe
- *  - native bridge via ExtendScript: apply the exported LUT to the selected clip
  *
- * Grab-frame was removed: it depended on the undocumented QE method
- * exportFramePNG(), which is dead in Premiere 26 — every call returns true
- * but never writes a file (confirmed by exhaustive live testing, not a
- * guess). Export a still frame from Premiere yourself and drag it into the
- * embedded app instead.
+ * No ExtendScript bridge: both native integrations that used it were tried
+ * and removed.
+ *  - Grab-frame depended on the undocumented QE method exportFramePNG(),
+ *    which is dead in Premiere 26 — every call returns true but never
+ *    writes a file (confirmed by exhaustive live testing).
+ *  - Apply-to-clip could set the Lumetri Look, but even with the correct
+ *    properties (LookAsset + the Look enum, reverse-engineered from what
+ *    Premiere itself writes when browsing a LUT through the real UI) it
+ *    still didn't render visibly — dropped in favor of applying LUTs
+ *    manually in Lumetri, which always worked.
  *
  * The installed panel is a copy in ~/Library/.../CEP/extensions/LUTMatch, so
  * the project location comes from config.json written by install.sh.
  */
 
-/* global CSInterface */
-
 const BASE = "http://127.0.0.1:8765";
-const cs = new CSInterface();
 
 const nodeRequire =
   (window.cep_node && window.cep_node.require) || window.require || null;
@@ -39,9 +40,10 @@ function setMsg(text, isError) {
 
 function readConfig() {
   try {
-    // "extension" = Adobe's SystemPath.EXTENSION constant (shim doesn't define it)
-    const dir = cs.getSystemPath("extension");
-    return JSON.parse(fs.readFileSync(dir + "/config.json", "utf8"));
+    // Loaded via file://.../LUTMatch/index.html — resolve config.json
+    // relative to this page's own directory (no CSInterface needed for this).
+    const dir = decodeURIComponent(new URL(".", document.location.href).pathname);
+    return JSON.parse(fs.readFileSync(dir + "config.json", "utf8"));
   } catch (e) {
     return null;
   }
@@ -131,7 +133,6 @@ function showOffline(text) {
   $("frame").style.display = "none";
   $("offline").style.display = "flex";
   $("offline-text").textContent = text;
-  $("apply").disabled = true;
 }
 
 function showApp() {
@@ -140,79 +141,9 @@ function showApp() {
   const frame = $("frame");
   frame.src = BASE + "/?panel=1";
   frame.style.display = "";
-  $("apply").disabled = false;
-}
-
-function evalScript(script) {
-  return new Promise((resolve) => cs.evalScript(script, resolve));
-}
-
-// --- fail-fast ExtendScript check (the one thing not verifiable from disk) ---
-async function pingHost() {
-  const res = await evalScript("lmPing()");
-  if (res !== "pong") {
-    setMsg(
-      "ExtendScript bridge failed (" + String(res).slice(0, 80) + ") — " +
-        "apply-to-clip disabled; the embedded app still works.",
-      true
-    );
-    $("apply").disabled = true;
-    return false;
-  }
-  return true;
-}
-
-// --- export the LUT and apply it to the selected clip ---
-function getIframeSettings() {
-  return new Promise((resolve) => {
-    const onMsg = (e) => {
-      if (e.data && e.data.type === "settings") {
-        window.removeEventListener("message", onMsg);
-        resolve(e.data);
-      }
-    };
-    window.addEventListener("message", onMsg);
-    $("frame").contentWindow.postMessage({ type: "get-settings" }, "*");
-    setTimeout(() => {
-      window.removeEventListener("message", onMsg);
-      resolve(null);
-    }, 1500);
-  });
-}
-
-async function applyLut() {
-  setMsg("Exporting LUT…");
-  $("apply").disabled = true;
-  try {
-    const settings = await getIframeSettings();
-    if (!settings || !settings.ready) {
-      throw new Error("Match colors first — nothing to export yet.");
-    }
-    const resp = await fetch(BASE + "/export-file?strength=" + (settings.strength ?? 1));
-    if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
-    const { path } = await resp.json();
-
-    setMsg("Applying to selected clip…");
-    const res = await evalScript('lmApplyLut("' + path.replace(/"/g, '\\"') + '")');
-    if (res === "ok") {
-      setMsg("LUT applied to the selected clip's Lumetri Look.");
-    } else {
-      // Graceful degrade: the .cube exists on disk either way.
-      setMsg(
-        "Couldn't auto-apply (" + res + "). LUT saved at " + path +
-          " — in Lumetri: Creative → Look → Browse.",
-        true
-      );
-    }
-  } catch (e) {
-    setMsg("Apply failed: " + e.message, true);
-  } finally {
-    $("apply").disabled = false;
-  }
 }
 
 // --- wiring ---
-$("apply").onclick = applyLut;
 $("retry").onclick = init;
 $("quit-server").onclick = async () => {
   try { await fetch(BASE + "/shutdown", { method: "POST" }); } catch (e) {}
@@ -222,10 +153,7 @@ $("quit-server").onclick = async () => {
 async function init() {
   setMsg("");
   try {
-    if (await ensureServer()) {
-      showApp();
-      await pingHost();
-    }
+    if (await ensureServer()) showApp();
   } catch (e) {
     // Safety net: any unexpected error (e.g. a browser API missing in CEP's
     // bundled Chromium) surfaces here instead of leaving the yellow

@@ -19,7 +19,6 @@
       <DispatchInfo>
         <Resources>
           <MainPath>./index.html</MainPath>
-          <ScriptPath>./host.jsx</ScriptPath>
           <CEFCommandLine>
             <Parameter>--allow-file-access-from-files</Parameter>
             <Parameter>--enable-nodejs</Parameter>

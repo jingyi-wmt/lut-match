@@ -179,6 +179,7 @@
       </label>
       <div class="mode-row">
         <button class="primary" id="export" disabled>⬇ Export .cube</button>
+        <span id="export-msg" style="color:var(--dim);font-size:12px"></span>
         <div class="looks" id="looks">
           <span class="hint" id="looks-hint">Like this look? Save it, tweak on, then click a chip to flip back:</span>
           <span class="chip" id="chip-A"></span>
@@ -492,8 +493,25 @@ function markDiverged() {
 renderLooks();
 
 // --- export & quit ---
-$("export").onclick = () => {
-  window.location = `/export?strength=${$("strength").value}`;
+const isPanel = new URLSearchParams(location.search).get("panel") === "1";
+$("export").onclick = async () => {
+  if (!isPanel) {
+    // Standalone browser use: a normal download works fine here.
+    window.location = `/export?strength=${$("strength").value}`;
+    return;
+  }
+  // Inside the Premiere panel's embedded iframe there is no download
+  // manager to catch a file-download navigation — CEP's browser aborts it
+  // silently (net::ERR_ABORTED), even though the server already wrote the
+  // file. So in panel mode, ask for the path directly and just show it.
+  $("export-msg").textContent = "Exporting…";
+  try {
+    const { path } = await api(`/export-file?strength=${$("strength").value}`);
+    $("export-msg").textContent = "Saved: " + path;
+  } catch (e) {
+    $("export-msg").textContent = "";
+    setError("Export failed: " + e.message);
+  }
 };
 $("quit").onclick = async () => {
   try { await api("/shutdown", { method: "POST" }); } catch {}
@@ -502,23 +520,10 @@ $("quit").onclick = async () => {
 
 // --- Premiere panel integration ---
 // Inside the CEP panel the app is embedded as ?panel=1: the panel shell owns
-// the chrome and notifies us via postMessage when it grabs a playhead frame.
-if (new URLSearchParams(location.search).get("panel") === "1") {
+// the chrome (status dot, Retry, Quit); this page is just the app itself.
+if (isPanel) {
   document.body.classList.add("panel-mode");
 }
-window.addEventListener("message", async e => {
-  if (!e.data) return;
-  if (e.data.type === "frame-updated") {
-    try {
-      const st = await api("/status");
-      afterImageSet("frame", st.warnings?.frame || []);
-    } catch (err) { setError(err.message); }
-  } else if (e.data.type === "get-settings") {
-    e.source.postMessage(
-      { type: "settings", strength: +$("strength").value, ready: state.ready }, "*"
-    );
-  }
-});
 
 // --- init ---
 (async () => {
