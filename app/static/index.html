@@ -494,24 +494,75 @@ renderLooks();
 
 // --- export & quit ---
 const isPanel = new URLSearchParams(location.search).get("panel") === "1";
+
+function parseSuggestedName(contentDisposition) {
+  const star = /filename\*=utf-8''([^;]+)/i.exec(contentDisposition || "");
+  if (star) return decodeURIComponent(star[1]);
+  const plain = /filename="?([^";]+)"?/i.exec(contentDisposition || "");
+  return plain ? plain[1] : "look.cube";
+}
+
+// Ask the panel shell to show a native macOS save dialog (this page has no
+// such thing available itself) and write the file wherever the user picks.
+function requestSaveFromShell(strength) {
+  return new Promise((resolve) => {
+    const onMsg = (e) => {
+      if (e.data && e.data.type === "save-result") {
+        window.removeEventListener("message", onMsg);
+        resolve(e.data);
+      }
+    };
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({ type: "request-save", strength }, "*");
+    setTimeout(() => {
+      window.removeEventListener("message", onMsg);
+      resolve({ ok: false, error: "No response from the panel shell (timed out)." });
+    }, 30000);
+  });
+}
+
 $("export").onclick = async () => {
-  if (!isPanel) {
-    // Standalone browser use: a normal download works fine here.
-    window.location = `/export?strength=${$("strength").value}`;
+  const strength = +$("strength").value;
+
+  if (isPanel) {
+    $("export-msg").textContent = "Choose where to save…";
+    const result = await requestSaveFromShell(strength);
+    if (result.ok) {
+      $("export-msg").textContent = "Saved: " + result.path;
+    } else if (result.cancelled) {
+      $("export-msg").textContent = "";
+    } else {
+      $("export-msg").textContent = "";
+      setError("Export failed: " + (result.error || "unknown error"));
+    }
     return;
   }
-  // Inside the Premiere panel's embedded iframe there is no download
-  // manager to catch a file-download navigation — CEP's browser aborts it
-  // silently (net::ERR_ABORTED), even though the server already wrote the
-  // file. So in panel mode, ask for the path directly and just show it.
-  $("export-msg").textContent = "Exporting…";
-  try {
-    const { path } = await api(`/export-file?strength=${$("strength").value}`);
-    $("export-msg").textContent = "Saved: " + path;
-  } catch (e) {
-    $("export-msg").textContent = "";
-    setError("Export failed: " + e.message);
+
+  // Standalone browser use: let the user pick a save location directly
+  // where supported (Chrome/Edge), falling back to a normal download
+  // (Safari and older browsers) which saves to the Downloads folder.
+  if (window.showSaveFilePicker) {
+    try {
+      const resp = await fetch(`/export?strength=${strength}`);
+      if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+      const suggestedName = parseSuggestedName(resp.headers.get("content-disposition"));
+      const blob = await resp.blob();
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: "LUT file", accept: { "application/octet-stream": [".cube"] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      $("export-msg").textContent = "Saved: " + (handle.name || suggestedName);
+    } catch (e) {
+      if (e.name === "AbortError") return; // user cancelled the picker
+      setError("Export failed: " + e.message);
+    }
+    return;
   }
+
+  window.location = `/export?strength=${strength}`;
 };
 $("quit").onclick = async () => {
   try { await api("/shutdown", { method: "POST" }); } catch {}

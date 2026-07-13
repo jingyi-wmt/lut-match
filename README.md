@@ -29,7 +29,7 @@ Either way, the app opens at `http://127.0.0.1:8765` in your browser. Click the 
 2. **Footage frame** — drop in a still frame exported from your actual footage. Tell it what kind of footage it is (normal Rec.709, or a log profile like S-Log3/V-Log/C-Log3) so it decodes the colors correctly.
 3. **Match** — click **Match colors**. It automatically corrects any lighting issues in your frame first (you'll see a summary of what it fixed, if anything), then matches your footage's colors to the reference.
 4. **Fine-tune** — hover over the preview to compare before/after with a sliding wipe. Adjust Strength (how much of the match to apply) and the six fine-tune sliders (temperature, tint, contrast, saturation, shadows, highlights) to taste. Use **Save look** to pin a version you like so you can compare a few variations, then **Export .cube**.
-5. Load the exported `.cube` into Premiere: **Lumetri Color → Creative → Look**, and browse to the file (it lands in this project's `output/` folder).
+5. Click **Export .cube** and choose where to save it (Chrome/Edge; Safari saves to your Downloads folder). Load it into Premiere: **Lumetri Color → Creative → Look**, and browse to the file.
 
 ## Project layout
 
@@ -47,7 +47,7 @@ lut-match/
 
 ## Premiere Pro panel (experimental — `feature-extension` branch)
 
-LUT Match can also run as a docked panel inside Premiere Pro 2026 — the same app, just embedded in Premiere instead of a browser tab. Export a still frame from your footage as usual and drag it into the panel's Footage frame drop zone; when you export a LUT, the panel shows you the exact saved path (a normal browser-style download dialog can't appear inside a panel, so this is the equivalent). Drop that `.cube` onto the clip's Lumetri Color effect yourself — Creative → Look → Browse.
+LUT Match can also run as a docked panel inside Premiere Pro 2026 — the same app, just embedded in Premiere instead of a browser tab. Export a still frame from your footage as usual and drag it into the panel's Footage frame drop zone. Clicking **Export .cube** opens a native macOS save dialog (a normal browser download dialog can't appear inside a panel, so the panel shell handles this itself) — pick wherever you like. Drop that `.cube` onto the clip's Lumetri Color effect yourself — Creative → Look → Browse.
 
 Two native integrations were tried here and removed after real testing showed they don't work reliably on Premiere 26:
 - **Grab frame** relied on an undocumented API (`exportFramePNG`) that reports success but never writes a file.

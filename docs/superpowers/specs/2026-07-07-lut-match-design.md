@@ -322,3 +322,36 @@ iframe's own CDP target actually bypassed it during testing — only a cache-bus
 refresh control for the end user, this would have meant every future update to the app
 silently failed to appear until Premiere was fully restarted. Fixed at the source:
 `GET /` now sends `Cache-Control: no-store`.
+
+## Feature — 2026-07-13 (choose Export .cube save location)
+
+JZ wanted to pick where the exported LUT is saved, instead of it always landing in
+`output/`. Implemented per-context since the mechanism differs:
+
+- **Standalone browser**: uses the File System Access API (`showSaveFilePicker`) where
+  supported (Chrome/Edge) — fetches the .cube as a blob, lets the user pick a location,
+  writes it there directly. Falls back to a plain download (Safari, older browsers).
+  Verified live in a real browser: mocked `showSaveFilePicker`, clicked the real Export
+  button, confirmed the correct suggested filename, a 970KB blob (a genuine 33³ LUT, not
+  a stub), and the writable stream closed cleanly.
+- **CEP panel**: the embedded iframe is just a web page with no OS dialog access, so the
+  panel *shell* (`cep/main.js`, which has Node integration) now owns the whole save flow.
+  The app posts `{type: "request-save", strength}` to its parent; the shell fetches the
+  bytes itself, parses the suggested filename off `Content-Disposition`, shows a native
+  save dialog via `osascript -e 'choose file name ...'` (defaulting to the project's
+  `output/` folder), writes the bytes to wherever the user picked via `fs.writeFileSync`,
+  and replies `{type: "save-result", ok, path}` (or `{cancelled: true}` if the dialog was
+  dismissed). Verified live against the running panel: `execFileSync`+`osascript` and
+  `Buffer`+`fs.writeFileSync` both proven to work in the shell's Node context, then the
+  full message round-trip end-to-end (real fetch, real 970KB LUT, real file written) with
+  `execFileSync` temporarily stubbed to avoid popping an actual interactive dialog during
+  automated testing — that one piece needs a human to click through, and is JZ's to
+  confirm.
+
+Found and fixed a supporting CORS gap along the way: `Content-Disposition` isn't in the
+CORS-safelisted response header list, so the panel shell's cross-origin fetch (`file://`
+→ `http://127.0.0.1:8765`) couldn't read the suggested filename until
+`expose_headers=["Content-Disposition"]` was added to the CORS middleware.
+
+`/export-file` (the JSON-path endpoint added for the old panel-mode export and
+apply-to-clip) is now dead — nothing calls it anymore. Removed, along with its test.

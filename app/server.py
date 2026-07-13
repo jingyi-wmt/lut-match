@@ -33,7 +33,14 @@ app = FastAPI(title="LUT Match")
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    # Content-Disposition isn't CORS-safelisted by default, so a cross-origin
+    # fetch (the panel shell, from file://) can't read the suggested filename
+    # off the response unless it's explicitly exposed here.
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -224,13 +231,6 @@ def _bake_to_disk(strength: float, size: int) -> Path:
 def export(strength: float = 1.0, size: int = 33):
     path = _bake_to_disk(strength, size)
     return FileResponse(path, filename=path.name, media_type="application/octet-stream")
-
-
-@app.get("/export-file")
-def export_file(strength: float = 1.0, size: int = 33):
-    """Bake and return the .cube's absolute path (CEP panel apply-to-clip)."""
-    path = _bake_to_disk(strength, size)
-    return {"ok": True, "path": str(path)}
 
 
 @app.get("/status")

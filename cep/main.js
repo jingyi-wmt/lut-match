@@ -26,6 +26,7 @@ const nodeRequire =
 const fs = nodeRequire ? nodeRequire("fs") : null;
 const cp = nodeRequire ? nodeRequire("child_process") : null;
 const os = nodeRequire ? nodeRequire("os") : null;
+const Buffer = nodeRequire ? nodeRequire("buffer").Buffer : null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -142,6 +143,56 @@ function showApp() {
   frame.src = BASE + "/?panel=1";
   frame.style.display = "";
 }
+
+// --- Export .cube: let the user pick a save location via a native macOS
+// dialog. The embedded app has no such thing available (it's just a web
+// page), so it asks the shell to do this and reports back over postMessage.
+function parseSuggestedName(contentDisposition) {
+  const star = /filename\*=utf-8''([^;]+)/i.exec(contentDisposition || "");
+  if (star) return decodeURIComponent(star[1]);
+  const plain = /filename="?([^";]+)"?/i.exec(contentDisposition || "");
+  return plain ? plain[1] : "look.cube";
+}
+
+window.addEventListener("message", async (e) => {
+  if (!e.data || e.data.type !== "request-save") return;
+  const reply = (payload) =>
+    e.source.postMessage(Object.assign({ type: "save-result" }, payload), "*");
+
+  if (!nodeRequire) {
+    reply({ ok: false, error: "Node integration unavailable in this panel." });
+    return;
+  }
+  try {
+    const resp = await fetch(BASE + "/export?strength=" + (e.data.strength ?? 1));
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+    const suggestedName = parseSuggestedName(resp.headers.get("content-disposition"));
+    const bytes = Buffer.from(await resp.arrayBuffer());
+
+    const config = readConfig();
+    const defaultDir =
+      config && config.projectPath ? config.projectPath + "/output" : os.tmpdir();
+
+    const script =
+      'POSIX path of (choose file name with prompt "Save LUT as:" default name "' +
+      suggestedName.replace(/"/g, '\\"') +
+      '" default location (POSIX file "' +
+      defaultDir.replace(/"/g, '\\"') +
+      '"))';
+
+    let chosenPath;
+    try {
+      chosenPath = cp.execFileSync("osascript", ["-e", script], { encoding: "utf8" }).trim();
+    } catch (cancelErr) {
+      reply({ ok: false, cancelled: true });
+      return;
+    }
+    fs.writeFileSync(chosenPath, bytes);
+    reply({ ok: true, path: chosenPath });
+  } catch (err) {
+    reply({ ok: false, error: err.message });
+  }
+});
 
 // --- wiring ---
 $("retry").onclick = init;
