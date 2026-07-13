@@ -16,13 +16,11 @@
   #status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); flex: 0 0 auto; }
   #status-dot.ok { background: var(--ok); }
   #status-dot.wait { background: #e8b84a; }
-  #status-text { color: var(--dim); margin-right: 6px; white-space: nowrap; }
+  #status-text { color: var(--dim); margin-right: 6px; white-space: nowrap; flex: 1; }
   button { background: #262a33; color: var(--text); border: 1px solid #3a4050;
            border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 12px; }
   button:hover:not(:disabled) { border-color: var(--accent); }
   button:disabled { opacity: .4; cursor: default; }
-  #msg { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  #msg.error { color: var(--err); }
   #quit-server { margin-left: auto; color: var(--dim); font-size: 11px; padding: 4px 9px; }
 
   #frame { flex: 1 1 auto; border: none; width: 100%; background: var(--bg); }
@@ -34,7 +32,6 @@
   <div id="toolbar">
     <span id="status-dot"></span>
     <span id="status-text">starting…</span>
-    <span id="msg"></span>
     <button id="quit-server" title="Stop the LUT Match engine">✕ Stop engine</button>
   </div>
   <iframe id="frame" style="display:none"></iframe>

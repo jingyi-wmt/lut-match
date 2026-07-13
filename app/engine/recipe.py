@@ -1,16 +1,13 @@
-"""GradingRecipe — the structured "color DNA" of a reference look.
+"""GradingRecipe — the user-editable fine-tune layer applied after a match.
 
-This is the contract between the vision layer (which produces it) and the
-render pipeline (which applies it). All fields have identity defaults so a
-default-constructed recipe is a no-op.
+All fields have identity defaults, so a default-constructed recipe is a no-op.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-# Hue band order used by hue_saturation / hue_shift (degrees are band centers).
-HUE_BANDS = ("red", "yellow", "green", "cyan", "blue", "magenta")
+# Band centers for hue_saturation, in degrees (red, yellow, green, cyan, blue, magenta).
 HUE_BAND_CENTERS = (0.0, 60.0, 120.0, 180.0, 240.0, 300.0)
 
 
@@ -52,7 +49,8 @@ class GradingRecipe(BaseModel):
     shadows: float = Field(default=0.0, ge=-1.0, le=1.0)      # + lift / - crush shadow region
     highlights: float = Field(default=0.0, ge=-1.0, le=1.0)   # + boost / - recover highlights
 
-    # Per-hue saturation multipliers, band order = HUE_BANDS.
+    # Per-hue saturation multipliers, one per band centered on HUE_BAND_CENTERS
+    # (red, yellow, green, cyan, blue, magenta).
     hue_saturation: list[float] = Field(default_factory=lambda: [1.0] * 6)
 
     tone_curve: list[CurvePoint] = Field(default_factory=list)  # luma curve, optional
@@ -61,8 +59,6 @@ class GradingRecipe(BaseModel):
     # How strongly to shield skin tones from hue-sat and split-tone moves.
     # 0 = no protection, 1 = skin fully pinned. Identity-safe at any value.
     skin_protection: float = Field(default=0.7, ge=0.0, le=1.0)
-
-    look_description: str = ""
 
     def model_post_init(self, __context) -> None:
         if len(self.hue_saturation) != 6:

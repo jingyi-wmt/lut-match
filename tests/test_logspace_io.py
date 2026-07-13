@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from app.engine.io import downsample_for_analysis, load_image
+from app.engine.io import load_image
 from app.engine.logspace import FOOTAGE_TYPES, to_display
 
 
@@ -51,8 +51,3 @@ class TestIO:
         p.write_bytes(b"nope")
         with pytest.raises(ValueError, match="unsupported image type"):
             load_image(p)
-
-    def test_downsample(self):
-        big = np.zeros((2000, 1000, 3), dtype=np.float32)
-        small = downsample_for_analysis(big)
-        assert max(small.shape[:2]) == 1024

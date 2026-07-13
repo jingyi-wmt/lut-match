@@ -88,25 +88,3 @@ def apply_banded_match(
     if strength < 1.0:
         out = src + (out - src) * np.float32(max(0.0, strength))
     return np.clip(out, 0.0, 1.0)
-
-
-# --- single-transform variants kept for comparison/tests ---
-
-def mkl_transform(frame: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Global (A, b): graded = pixels @ A.T + b."""
-    f = frame.reshape(-1, 3).astype(np.float64)
-    r = reference.reshape(-1, 3).astype(np.float64)
-    ones_f = np.ones(len(f))
-    ones_r = np.ones(len(r))
-    mu_f, cov_f = _weighted_stats(f, ones_f)
-    mu_r, cov_r = _weighted_stats(r, ones_r)
-    return _mkl(mu_f, cov_f, mu_r, cov_r)
-
-
-def apply_match(pixels: np.ndarray, A: np.ndarray, b: np.ndarray, strength: float = 1.0) -> np.ndarray:
-    src = pixels.astype(np.float32, copy=False)
-    out = (pixels.reshape(-1, 3).astype(np.float64) @ A.T + b).reshape(pixels.shape)
-    out = out.astype(np.float32)
-    if strength < 1.0:
-        out = src + (out - src) * np.float32(max(0.0, strength))
-    return np.clip(out, 0.0, 1.0)

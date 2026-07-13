@@ -34,10 +34,6 @@ function setStatus(cls, text) {
   $("status-dot").className = cls;
   $("status-text").textContent = text;
 }
-function setMsg(text, isError) {
-  $("msg").textContent = text || "";
-  $("msg").className = isError ? "error" : "";
-}
 
 function readConfig() {
   try {
@@ -207,7 +203,6 @@ $("quit-server").onclick = async () => {
 };
 
 async function init() {
-  setMsg("");
   try {
     if (await ensureServer()) showApp();
   } catch (e) {

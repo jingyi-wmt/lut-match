@@ -5,10 +5,12 @@ from __future__ import annotations
 import io as _io
 import os
 import signal
+import threading
 from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from PIL import Image
 from pydantic import BaseModel
@@ -30,8 +32,6 @@ app = FastAPI(title="LUT Match")
 # The CEP panel shell runs from file:// (origin "null") and fetches this API.
 # The server binds to 127.0.0.1 only, so permissive CORS exposes nothing
 # beyond this machine.
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -256,7 +256,5 @@ def status():
 @app.post("/shutdown")
 def shutdown():
     """Quit button: stop the server after this response is sent."""
-    import threading
-
     threading.Timer(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()
     return {"ok": True}
